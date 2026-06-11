@@ -1,0 +1,109 @@
+# Shop Backend (Python/Xime)
+
+Bản migrate **Shop Backend** từ PHP/Symfony sang Python, dùng framework **[Xime](D:\code\xime\xime framework)** với kiến trúc đa lớp.
+
+> **Mục đích chính của dự án này là kiểm thử framework Xime trong thực tế** — xác minh các tính năng
+> DI, routing, transaction, security, SQLAlchemy starter hoạt động đúng trên một ứng dụng backend
+> thật quy mô vừa. Dự án đồng thời là **tài liệu tham khảo** (reference implementation) cho bất kỳ
+> ai muốn học cách xây dựng ứng dụng Python với Xime theo kiến trúc đa lớp.
+
+## Xime framework — những gì được kiểm chứng qua dự án này
+
+| Tính năng Xime | Được kiểm thử ở |
+|---|---|
+| Scan-based DI (không annotation) | Toàn bộ service, repository, controller |
+| Class-based controller + decorator route | `controller/` — 18 controller |
+| `from __future__ import annotations` bắt buộc trên Python 3.14 khi method tên trùng builtin | Tất cả controller có method `list` |
+| `TransactionManager` từ `xime.core.transaction.manager` | Mọi service có thao tác ghi |
+| `AsyncSessionFactory.current()` | `BaseRepository` |
+| `xime.starters.sqlalchemy` starter | `config/database.py` |
+| `xime.adapters.web.openapi.JwtBearer` | `config/web.py` |
+| `TestApplication` + lifespan context trong test | `test/test_integration_db.py` |
+| Security context (`identity`, `credentials`) | `security/current_user.py` |
+
+## Yêu cầu
+
+- Python 3.12+
+- PostgreSQL 14+
+- Framework Xime (cài từ local path)
+
+## Cài đặt
+
+```bash
+# 1. Cài Xime framework (editable)
+pip install -e "D:\code\xime\xime framework"
+
+# 2. Cài dependencies dự án
+pip install -e ".[dev]"
+
+# 3. Sao chép file môi trường
+cp .env.example .env
+# Chỉnh sửa .env với thông tin DB và JWT thực tế
+```
+
+## Cấu hình
+
+Tạo file `.env` dựa trên `.env.example`. Các biến bắt buộc:
+
+| Biến | Mô tả |
+|---|---|
+| `DATABASE_URL` | PostgreSQL async URL (`postgresql+asyncpg://...`) |
+| `JWT_SECRET_KEY` | Chuỗi bí mật JWT (tối thiểu 32 ký tự) |
+| `UPLOAD_DIR` | Thư mục lưu file upload (mặc định: `public/data`) |
+
+## Khởi tạo cơ sở dữ liệu
+
+```bash
+# Chạy migration (Alembic)
+alembic upgrade head
+
+# Seed dữ liệu khởi tạo (quyền + nhóm admin + tài khoản admin)
+python -m app.seed
+```
+
+Tài khoản admin mặc định: `admin` / `Admin@123` — **đổi mật khẩu ngay sau khi seed**.
+
+## Chạy ứng dụng
+
+```bash
+python app/main.py
+```
+
+Server chạy tại `http://localhost:8088` (hoặc theo cấu hình Xime).
+
+Swagger UI: `http://localhost:8088/docs`
+
+## Chạy tests
+
+```bash
+pytest test/
+```
+
+## Cấu trúc thư mục
+
+```
+app/
+├── config/          # DI, web adapter, database config
+├── controller/      # HTTP endpoints (class-based, Xime routing)
+├── service/         # Business logic
+├── repository/      # Data access (SQLAlchemy async)
+├── entity/          # SQLAlchemy models
+├── dto/             # Request/Response Pydantic models
+│   ├── request/
+│   └── response/
+├── exception/       # AppException, error codes, handler
+├── security/        # JWT middleware, current_user context
+└── seed.py          # Dữ liệu khởi tạo
+```
+
+## Danh sách API chính
+
+| Module | Prefix | Mô tả |
+|---|---|---|
+| Auth | `/api` | login, logout, refresh, change-password |
+| Phân quyền | `/api/group`, `/api/permission`, ... | Nhóm, quyền, phân quyền |
+| Catalog | `/api/categories`, `/api/products` | Danh mục, sản phẩm |
+| Mua hàng | `/api/cart`, `/api/orders`, `/api/coupons` | Giỏ hàng, đơn hàng |
+| Tương tác | `/api/reviews`, `/api/wishlist`, `/api/notifications` | Đánh giá, yêu thích |
+| File | `/api/files` | Upload/quản lý file |
+| Tìm kiếm | `/api/search` | Tìm kiếm sản phẩm |

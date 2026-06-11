@@ -1,0 +1,59 @@
+from __future__ import annotations
+
+from xime.adapters.web.routing import delete, get, post
+
+from app.dto.request.wishlist_request import WishlistCreateRequest
+from app.dto.response.token_response import MessageResponse
+from app.dto.response.wishlist_response import WishlistResponse
+from app.exception.app_exception import AppException
+from app.security.current_user import require_login
+from app.service.authorization_service import AuthorizationService
+from app.service.wishlist_service import WishlistService
+
+
+class WishlistController:
+    prefix = "/api/wishlist"
+    tags = ["wishlist"]
+
+    def __init__(
+        self,
+        wishlist_service: WishlistService,
+        authorization_service: AuthorizationService,
+    ) -> None:
+        self._svc = wishlist_service
+        self._authz = authorization_service
+
+    @get("/all")
+    async def list(self) -> list[WishlistResponse]:
+        user = require_login()
+        await self._authz.require(user, "view_wishlists")
+        items = await self._svc.get_all_wishlist_items()
+        return [WishlistResponse.model_validate(i) for i in items]
+
+    @get("")
+    async def user_wishlist(self) -> list[dict]:
+        # Returns products in the current user's wishlist (mirrors PHP getProductsByUser)
+        # Trả về danh sách sản phẩm trong wishlist của user hiện tại
+        user = require_login()
+        products = await self._svc.get_products_by_user(user.id)
+        return [{"id": p.id, "name": p.name} for p in products]
+
+    @get("/{id}")
+    async def detail(self, id: int) -> WishlistResponse:
+        item = await self._svc.get_wishlist_item_by_id(id)
+        if not item:
+            raise AppException("E10200")
+        return WishlistResponse.model_validate(item)
+
+    @post("", status_code=201)
+    async def create(self, body: WishlistCreateRequest) -> WishlistResponse:
+        user = require_login()
+        data = body.model_dump(by_alias=True)
+        item = await self._svc.create_wishlist_item(data, user.id)
+        return WishlistResponse.model_validate(item)
+
+    @delete("/{id}")
+    async def remove(self, id: int) -> MessageResponse:
+        user = require_login()
+        await self._svc.delete_wishlist_item(id, user.id)
+        return MessageResponse(message="Wishlist item deleted")

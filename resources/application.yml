@@ -1,0 +1,23 @@
+# Shop Backend — Runtime Configuration
+# Operator-configurable. KHÔNG commit thông tin nhạy cảm thật.
+# Override cục bộ qua application-local.yml (đã gitignore).
+
+server:
+  host: "0.0.0.0"
+  port: 8088
+
+# Database — bổ sung sử dụng ở Phase 1 (starter SQLAlchemy).
+database:
+  url: "postgresql+asyncpg://thang:123456@localhost:5432/shop"
+  pool_size: 10
+  max_overflow: 20
+  echo: false
+
+# JWT — cấu hình xác thực token (Phase 3).
+# QUAN TRỌNG: thay jwt.secret bằng chuỗi ngẫu nhiên an toàn trước khi deploy.
+jwt:
+  secret: "dev-secret-CHANGE-IN-PRODUCTION-use-32chars-minimum"
+  issuer: "https://scime.click"
+  audience: "https://shop.scime.click"
+  access_ttl: 3600      # access token: 1 giờ (giây)
+  refresh_ttl: 5184000  # refresh token: 60 ngày (giây)

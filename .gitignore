@@ -1,0 +1,61 @@
+# ===== Bí mật & cấu hình nhạy cảm (KHÔNG commit) =====
+# Secrets & sensitive config — passwords, keys, tokens
+.env
+.env.*
+!.env.example
+*.env
+# Runtime override chứa secret thật (theo mẫu data service)
+resources/application-local.yml
+resources/application-secret.yml
+# Khóa, chứng chỉ, secret files
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+secrets/
+runtime/security/
+
+# ===== Python =====
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+build/
+dist/
+.Python
+
+# ===== Môi trường ảo =====
+.venv/
+venv/
+env/
+ENV/
+
+# ===== Test & coverage =====
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+
+# ===== Database cục bộ =====
+*.sqlite
+*.sqlite3
+*.db
+
+# ===== Runtime / dữ liệu sinh ra =====
+runtime/
+var/
+logs/
+*.log
+# Thư mục lưu file upload cục bộ (FileService)
+public/data/
+storage/
+
+# ===== IDE / OS =====
+.idea/
+.vscode/
+*.swp
+.DS_Store
+Thumbs.db
