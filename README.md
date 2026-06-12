@@ -1,6 +1,6 @@
 # Shop Backend (Python/Xime)
 
-Bản migrate **Shop Backend** từ PHP/Symfony sang Python, dùng framework **[Xime](D:\code\xime\xime framework)** với kiến trúc đa lớp.
+Bản migrate **Shop Backend** từ PHP/Symfony sang Python, dùng framework **[Xime](https://github.com/nguyen-huu-thang/xime-framework)** với kiến trúc đa lớp.
 
 > **Mục đích chính của dự án này là kiểm thử framework Xime trong thực tế** — xác minh các tính năng
 > DI, routing, transaction, security, SQLAlchemy starter hoạt động đúng trên một ứng dụng backend
@@ -25,13 +25,13 @@ Bản migrate **Shop Backend** từ PHP/Symfony sang Python, dùng framework **[
 
 - Python 3.12+
 - PostgreSQL 14+
-- Framework Xime (cài từ local path)
+- Framework Xime
 
 ## Cài đặt
 
 ```bash
-# 1. Cài Xime framework (editable)
-pip install -e "D:\code\xime\xime framework"
+# 1. Cài Xime framework
+pip install xime
 
 # 2. Cài dependencies dự án
 pip install -e ".[dev]"
