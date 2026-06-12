@@ -2,10 +2,32 @@
 
 Bản migrate **Shop Backend** từ PHP/Symfony sang Python, dùng framework **[Xime](https://github.com/nguyen-huu-thang/xime-framework)** với kiến trúc đa lớp.
 
-> **Mục đích chính của dự án này là kiểm thử framework Xime trong thực tế** — xác minh các tính năng
+> **Mục đích chính của dự án này là kiểm thử framework Xime trong thực tế** - xác minh các tính năng
 > DI, routing, transaction, security, SQLAlchemy starter hoạt động đúng trên một ứng dụng backend
 > thật quy mô vừa. Dự án đồng thời là **tài liệu tham khảo** (reference implementation) cho bất kỳ
 > ai muốn học cách xây dựng ứng dụng Python với Xime theo kiến trúc đa lớp.
+
+## Dự án gốc (PHP/Symfony)
+
+Toàn bộ nghiệp vụ được sao chép 1-1 từ dự án backend gốc viết bằng **PHP/Symfony**:
+
+➡️ **[github.com/nguyen-huu-thang/shop-backend](https://github.com/nguyen-huu-thang/shop-backend)**
+
+Dự án Python này giữ nguyên kiến trúc đa lớp và logic nghiệp vụ của bản gốc, chỉ thay đổi
+ngôn ngữ và framework. Bảng đối chiếu công nghệ giữa hai bản:
+
+| Bản gốc (PHP) | Bản này (Python) |
+|---|---|
+| PHP 8.2+ / Symfony | Python 3.12+ / Xime framework |
+| Doctrine ORM | SQLAlchemy (async) qua `xime.starters.sqlalchemy` |
+| Symfony Validator | Pydantic |
+| Symfony DI (autowire) | Xime DI (constructor injection, type-hint driven) |
+| Lcobucci JWT | PyJWT qua `xime.starters.jwt` |
+| EventListener (kernel.request) | Web middleware của Xime |
+| nelmio_api_doc | OpenAPI/Swagger tích hợp sẵn FastAPI |
+| MySQL hoặc PostgreSQL | PostgreSQL |
+
+> Cùng tác giả; bản PHP được phát triển trước, bản Python là phiên bản viết lại để kiểm thử Xime.
 
 ## Xime framework — những gì được kiểm chứng qua dự án này
 
