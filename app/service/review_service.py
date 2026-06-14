@@ -62,7 +62,7 @@ class ReviewService:
         async with self._transaction():
             review = await self._repo.find(review_id)
             if not review:
-                raise AppException("E10200")
+                raise AppException("E10600")
             if "rating" in data:
                 review.rating = int(data["rating"])
             if "comment" in data:
@@ -75,7 +75,7 @@ class ReviewService:
         async with self._transaction():
             review = await self._repo.find(review_id)
             if not review:
-                raise AppException("E10200")
+                raise AppException("E10600")
             review.is_approved = True
             return await self._repo.save(review)
 
@@ -85,7 +85,7 @@ class ReviewService:
         async with self._transaction():
             review = await self._repo.find(review_id)
             if not review:
-                raise AppException("E10200")
+                raise AppException("E10600")
             review.is_approved = False
             return await self._repo.save(review)
 
@@ -93,5 +93,5 @@ class ReviewService:
         async with self._transaction():
             review = await self._repo.find(review_id)
             if not review:
-                raise AppException("E10200")
+                raise AppException("E10600")
             await self._repo.delete(review)

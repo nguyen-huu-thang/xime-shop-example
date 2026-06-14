@@ -56,7 +56,7 @@ class CartService:
         async with self._transaction():
             option = await self._option_repo.find(option_id)
         if not option:
-            raise AppException("E10502")
+            raise AppException("E10204")  # Product option not found
 
         async with self._transaction():
             existing = await self._repo.find_by_user_and_option(user_id, option_id)
@@ -65,7 +65,7 @@ class CartService:
             cart = existing[0]
             new_qty = cart.quantity + quantity
             if option.stock < new_qty:
-                raise AppException("E10600")  # exceeds stock
+                raise AppException("E10201")  # Product out of stock
             async with self._transaction():
                 db_cart = await self._repo.find(cart.id)
                 if db_cart:
@@ -74,7 +74,7 @@ class CartService:
             return cart
         else:
             if option.stock < quantity:
-                raise AppException("E10600")
+                raise AppException("E10201")  # Product out of stock
             async with self._transaction():
                 cart = Cart(user_id=user_id, product_option_id=option_id, quantity=quantity)
                 return await self._repo.save(cart)
@@ -86,7 +86,7 @@ class CartService:
         async with self._transaction():
             cart = await self._repo.find(cart_id)
         if not cart:
-            raise AppException("E10601")
+            raise AppException("E10300")  # Cart item not found
 
         is_owned = cart.user_id == user.id
         await self._authz.require(user, "edit_carts", target_id=cart_id, is_user_owned=is_owned)
@@ -94,7 +94,7 @@ class CartService:
         async with self._transaction():
             db_cart = await self._repo.find(cart_id)
             if not db_cart:
-                raise AppException("E10601")
+                raise AppException("E10300")  # Cart item not found
             db_cart.quantity = quantity
             return await self._repo.save(db_cart)
 
@@ -102,7 +102,7 @@ class CartService:
         async with self._transaction():
             cart = await self._repo.find(cart_id)
         if not cart:
-            raise AppException("E10601")
+            raise AppException("E10300")  # Cart item not found
 
         is_owned = cart.user_id == user.id
         await self._authz.require(user, "edit_carts", target_id=cart_id, is_user_owned=is_owned)

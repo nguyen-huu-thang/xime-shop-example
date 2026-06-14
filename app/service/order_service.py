@@ -88,7 +88,7 @@ class OrderService:
         async with self._transaction():
             order = await self._order_repo.find(order_id)
         if not order:
-            raise AppException("E10800")
+            raise AppException("E10500")
         return await self._build_order_dto(order)
 
     async def _get_option_attributes(self, option_id: int) -> str:
@@ -114,14 +114,14 @@ class OrderService:
         """
         cart_ids: list[int] = data.get("cart") or []
         if not cart_ids:
-            raise AppException("E10801")
+            raise AppException("E10505")
 
         # Load carts and validate outside write transaction
         # Load giỏ hàng và validate trước khi mở transaction ghi
         async with self._transaction():
             cart_items = await self._cart_repo.find_by_ids(cart_ids)
         if not cart_items:
-            raise AppException("E10801")
+            raise AppException("E10505")
 
         # Validate stock and calculate subtotal
         # Kiểm tra tồn kho và tính tổng tiền
@@ -133,7 +133,7 @@ class OrderService:
             if not opt:
                 raise AppException("E10502")
             if opt.stock < item.quantity:
-                raise AppException("E10802")  # exceeds stock
+                raise AppException("E10506")  # exceeds stock
             option_cache[item.id] = opt
             subtotal += item.quantity * float(opt.price or 0)
 
@@ -162,7 +162,7 @@ class OrderService:
                 if not db_opt:
                     raise AppException("E10502")
                 if db_opt.stock < item.quantity:
-                    raise AppException("E10802")
+                    raise AppException("E10506")
 
                 # Snapshot product name requires loading product
                 # Snapshot tên sản phẩm cần load product
@@ -205,7 +205,7 @@ class OrderService:
         async with self._transaction():
             order = await self._order_repo.find(order_id)
         if not order:
-            raise AppException("E10800")
+            raise AppException("E10500")
 
         is_owned = order.user_id == user.id
         await self._authz.require(user, "update_shipping_status", target_id=order_id, is_user_owned=is_owned)
@@ -213,7 +213,7 @@ class OrderService:
         async with self._transaction():
             db_order = await self._order_repo.find(order_id)
             if not db_order:
-                raise AppException("E10800")
+                raise AppException("E10500")
             db_order.address = address
             await self._order_repo.save(db_order)
 
@@ -223,7 +223,7 @@ class OrderService:
         async with self._transaction():
             order = await self._order_repo.find(order_id)
             if not order:
-                raise AppException("E10800")
+                raise AppException("E10500")
             # Delete child records first to avoid FK violation
             # Xóa order_details trước để tránh lỗi FK
             details = await self._detail_repo.find_by_order_id(order_id)

@@ -22,7 +22,7 @@ configure_openapi(
         public_paths=[
             "/api/login",
             "/api/refresh-token",
-            "/health",
+            "/api/health",
             "/docs",
             "/redoc",
             "/openapi.json",

@@ -179,6 +179,9 @@ ERROR_CODES: dict[str, ErrorDef] = {
     "E10301": ErrorDef(10301, "Không thể thêm sản phẩm vào giỏ hàng", 500),
     "E10302": ErrorDef(10302, "Không tìm thấy danh sách yêu thích", 404),
     "E10303": ErrorDef(10303, "Không thể thêm sản phẩm vào danh sách yêu thích", 500),
+    # Danh mục (E10310–E10319) — không có trong PHP gốc, thêm cho kiến trúc đa lớp
+    "E10310": ErrorDef(10310, "Không tìm thấy danh mục", 404),
+    "E10311": ErrorDef(10311, "Tên danh mục là bắt buộc", 400),
     "E10400": ErrorDef(10400, "Phiếu giảm giá không tồn tại", 404),
     "E10401": ErrorDef(10401, "Phiếu giảm giá đã hết hạn", 400),
     "E10402": ErrorDef(10402, "Phiếu giảm giá không hợp lệ", 400),
@@ -188,6 +191,8 @@ ERROR_CODES: dict[str, ErrorDef] = {
     "E10502": ErrorDef(10502, "Chi tiết đơn hàng không hợp lệ", 400),
     "E10503": ErrorDef(10503, "Không thể hủy đơn hàng", 400),
     "E10504": ErrorDef(10504, "Không thể xác nhận thanh toán cho đơn hàng", 500),
+    "E10505": ErrorDef(10505, "Giỏ hàng trống hoặc không hợp lệ", 400),
+    "E10506": ErrorDef(10506, "Số lượng vượt tồn kho", 400),
     "E10600": ErrorDef(10600, "Không tìm thấy đánh giá", 404),
     "E10601": ErrorDef(10601, "Người dùng không thể đánh giá sản phẩm này", 403),
     "E10602": ErrorDef(10602, "Đánh giá không hợp lệ", 400),

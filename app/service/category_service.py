@@ -37,45 +37,49 @@ class CategoryService:
 
     async def build_hierarchy_path(self, category: Category) -> str:
         """Walk parent chain via explicit queries; return 'Root/Parent/Child'.
-        Duyệt cây cha-con bằng query rõ ràng; trả về đường dẫn tên.
+        Duyệt cây cha-con bằng một transaction duy nhất; trả về đường dẫn tên.
         """
         names: list[str] = [category.name]
         current_parent_id = category.parent_id
-        while current_parent_id is not None:
-            async with self._transaction():
+        # Use a single transaction for the entire tree walk
+        # Dùng một transaction duy nhất cho toàn bộ quá trình duyệt cây
+        async with self._transaction():
+            while current_parent_id is not None:
                 parent = await self._repo.find(current_parent_id)
-            if not parent:
-                break
-            names.append(parent.name)
-            current_parent_id = parent.parent_id
+                if not parent:
+                    break
+                names.append(parent.name)
+                current_parent_id = parent.parent_id
         return "/".join(reversed(names))
 
     async def build_hierarchy_path_by_id(self, category: Category) -> str:
         """Walk parent chain; return '1/3/7' style id path.
-        Duyệt cây cha-con; trả về đường dẫn ID.
+        Duyệt cây cha-con trong một transaction; trả về đường dẫn ID.
         """
         ids: list[str] = [str(category.id)]
         current_parent_id = category.parent_id
-        while current_parent_id is not None:
-            async with self._transaction():
+        # Use a single transaction for the entire tree walk
+        # Dùng một transaction duy nhất cho toàn bộ quá trình duyệt cây
+        async with self._transaction():
+            while current_parent_id is not None:
                 parent = await self._repo.find(current_parent_id)
-            if not parent:
-                break
-            ids.append(str(parent.id))
-            current_parent_id = parent.parent_id
+                if not parent:
+                    break
+                ids.append(str(parent.id))
+                current_parent_id = parent.parent_id
         return "/".join(reversed(ids))
 
     async def create_category(self, data: dict) -> Category:
         name = data.get("name") or ""
         if not name:
-            raise AppException("E10301")
+            raise AppException("E10311")  # Category name required
 
         parent_id: int | None = data.get("parent_id") or data.get("parentId")
         if parent_id:
             async with self._transaction():
                 parent = await self._repo.find(parent_id)
             if not parent:
-                raise AppException("E10300")
+                raise AppException("E10310")  # Category not found
 
         async with self._transaction():
             cat = Category(
@@ -89,20 +93,23 @@ class CategoryService:
         async with self._transaction():
             cat = await self._repo.find(category_id)
         if not cat:
-            raise AppException("E10300")
+            raise AppException("E10310")  # Category not found
 
         if data.get("name"):
             cat.name = data["name"]
         if data.get("description") is not None:
             cat.description = data["description"]
 
-        raw_parent = data.get("parentId", data.get("parent_id", "__MISSING__"))
-        if raw_parent != "__MISSING__":
+        # Check if parent_id key is present at all (None = clear, missing key = no change)
+        # Kiểm tra xem key parent_id có trong data không (None = xóa parent, thiếu key = không đổi)
+        parent_key = "parentId" if "parentId" in data else ("parent_id" if "parent_id" in data else None)
+        if parent_key is not None:
+            raw_parent = data[parent_key]
             if raw_parent:
                 async with self._transaction():
                     parent = await self._repo.find(raw_parent)
                 if not parent:
-                    raise AppException("E10300")
+                    raise AppException("E10310")  # Category not found
             cat.parent_id = raw_parent if raw_parent else None
 
         async with self._transaction():
@@ -115,7 +122,7 @@ class CategoryService:
         async with self._transaction():
             cat = await self._repo.find(category_id)
         if not cat:
-            raise AppException("E10300")
+            raise AppException("E10310")  # Category not found
 
         parent_id = cat.parent_id
 

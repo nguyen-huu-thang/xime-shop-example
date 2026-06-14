@@ -191,17 +191,17 @@ class ProductService:
         """
         name = data.get("name") or ""
         if not name:
-            raise AppException("E10201")
+            raise AppException("E0003")   # Required parameter missing
         location = data.get("locationAddress") or ""
         if not location:
-            raise AppException("E10202")
+            raise AppException("E0003")   # Required parameter missing
 
         category_id: int | None = data.get("categoryId") or data.get("category_id")
         if category_id:
             async with self._transaction():
                 cat = await self._category_repo.find(category_id)
             if not cat:
-                raise AppException("E10300")
+                raise AppException("E10202")  # Category not found
 
         async with self._transaction():
             product = Product(

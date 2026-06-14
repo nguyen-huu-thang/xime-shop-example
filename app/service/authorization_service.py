@@ -50,14 +50,16 @@ class AuthorizationService:
         if is_user_owned:
             return True
 
-        # 3. Group permissions — PHP bug preserved: -1 (denied) is truthy → grants access
-        # 3. Quyền nhóm — giữ nguyên PHP bug: -1 (từ chối) vẫn là truthy → cho phép
+        # 3. Group permissions: 1 = granted, -1 = denied, 0 = not set
+        # 3. Quyền nhóm: 1 = cho phép, -1 = từ chối, 0 = không có quyền
         groups = await self._group_member_svc.find_groups_by_user(user)
         for group in groups:
             gp = await self._group_perm_svc.has_permission(
                 group.id, permission_name, target_id
             )
-            if gp:  # non-zero: both 1 (granted) and -1 (denied) pass — PHP bug
+            if gp < 0:
+                return False
+            if gp > 0:
                 return True
 
         # 4. Permission default_value fallback
