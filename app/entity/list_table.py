@@ -7,7 +7,7 @@ from app.entity.base import Base
 
 
 class ListTable(Base):
-    """Liệt kê tên bảng — phục vụ quan hệ đa hình của files.
+    """Liệt kê tên bảng - phục vụ quan hệ đa hình của files.
 
     Lưu ý: tên bảng là 'list_table' (số ít) và PK là cột 'id' (string) theo PHP entity.
     """

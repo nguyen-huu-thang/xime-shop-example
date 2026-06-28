@@ -1,5 +1,5 @@
 """
-ProductService — quản lý sản phẩm + thuộc tính + option.
+ProductService - quản lý sản phẩm + thuộc tính + option.
 Port từ ProductService.php.
 
 Lưu ý: create_product / updateOrCreate dùng repositories trực tiếp (single transaction).
@@ -7,7 +7,10 @@ Các sub-service được inject để dùng ở các thao tác đơn lẻ từ 
 """
 from __future__ import annotations
 
+import json
+
 from xime.core.transaction.manager import TransactionManager
+from xime.starters.cache import CacheService
 
 from app.entity.product import Product
 from app.entity.product_attribute import ProductAttribute
@@ -24,9 +27,15 @@ from app.repository.product_repository import ProductRepository
 
 
 class ProductService:
+    # Cache keys cho catalog đọc nhiều. TTL ngắn để dữ liệu không quá cũ.
+    # Cache keys for hot catalog reads. Short TTL so data is never too stale.
+    _CACHE_ALL = "product:all"
+    _CACHE_TTL = 300  # giây / seconds
+
     def __init__(
         self,
         transaction: TransactionManager,
+        cache: CacheService,
         product_repository: ProductRepository,
         category_repository: CategoryRepository,
         product_attribute_repository: ProductAttributeRepository,
@@ -35,6 +44,7 @@ class ProductService:
         product_option_value_repository: ProductOptionValueRepository,
     ) -> None:
         self._transaction = transaction
+        self._cache = cache
         self._product_repo = product_repository
         self._category_repo = category_repository
         self._attr_repo = product_attribute_repository
@@ -42,48 +52,74 @@ class ProductService:
         self._option_repo = product_option_repository
         self._option_val_repo = product_option_value_repository
 
+    # ─── Cache helpers ──────────────────────────────────────────────
+
+    @staticmethod
+    def _product_key(product_id: int) -> str:
+        return f"product:{product_id}"
+
+    async def _cache_get_json(self, key: str):
+        raw = await self._cache.get(key)
+        return json.loads(raw) if raw is not None else None
+
+    async def _cache_set_json(self, key: str, value) -> None:
+        # default=float: an toàn nếu DTO lỡ chứa Decimal (Numeric column).
+        # default=float: safe if a DTO happens to carry a Decimal value.
+        payload = json.dumps(value, default=float).encode("utf-8")
+        await self._cache.set(key, payload, ttl=self._CACHE_TTL)
+
+    async def _invalidate_product_cache(self, product_id: int | None = None) -> None:
+        # Xóa cache danh sách tổng + cache chi tiết của product bị thay đổi.
+        # Drop the full-list cache + the changed product's detail cache.
+        await self._cache.delete(self._CACHE_ALL)
+        if product_id is not None:
+            await self._cache.delete(self._product_key(product_id))
+
     # ─── Read helpers ──────────────────────────────────────────────
 
+    # Các _helper dưới đây KHÔNG tự mở transaction - chúng phải chạy bên trong một
+    # transaction do method đọc cấp trên mở. Trước đây mỗi helper mở transaction riêng
+    # trong vòng lặp gây N+1 (mỗi product cần nhiều transaction); nay gom về 1 transaction.
+    # The _helpers below do NOT open their own transaction - they must run inside one
+    # opened by the calling read method (gom N+1 về một transaction duy nhất).
+
     async def _get_attributes_dict(self, product_id: int) -> dict[str, list[str]]:
-        """Return {attr_name: [value, ...]} for a product.
-        Trả về dict thuộc tính → danh sách giá trị cho sản phẩm.
-        """
-        async with self._transaction():
-            attrs = await self._attr_repo.find_by_product_id(product_id)
+        """Return {attr_name: [value, ...]} for a product. Chạy trong transaction đang mở."""
+        attrs = await self._attr_repo.find_by_product_id(product_id)
         result: dict[str, list[str]] = {}
         for attr in attrs:
-            async with self._transaction():
-                vals = await self._attr_val_repo.find_by_attribute_id(attr.id)
+            vals = await self._attr_val_repo.find_by_attribute_id(attr.id)
             result[attr.name] = [v.value for v in vals]
         return result
 
     async def _find_option_default(self, product_id: int) -> ProductOption | None:
         """Return the 'default' option (only 1 option, or the one with no option_values).
-        Trả về option mặc định.
+        Trả về option mặc định. Chạy trong transaction đang mở.
         """
-        async with self._transaction():
-            options = await self._option_repo.find_by_product_id(product_id)
+        options = await self._option_repo.find_by_product_id(product_id)
         if len(options) == 1:
             return options[0]
         for opt in options:
-            async with self._transaction():
-                values = await self._option_val_repo.find_by_option_id(opt.id)
+            values = await self._option_val_repo.find_by_option_id(opt.id)
             if not values:
                 return opt
         return None
 
     async def _get_price_and_stock(self, product_id: int) -> dict:
-        async with self._transaction():
-            options = await self._option_repo.find_by_product_id(product_id)
+        """Tính giá + tồn kho. Chạy trong transaction đang mở."""
+        options = await self._option_repo.find_by_product_id(product_id)
         if len(options) == 1:
-            return {"prices": options[0].price, "stock": options[0].stock}
+            price = options[0].price
+            return {
+                "prices": float(price) if price is not None else None,
+                "stock": options[0].stock,
+            }
 
         # Filter out default (no-value) option from price calculation
         # Bỏ option mặc định (không có value) khỏi tính giá
         priced_options: list[ProductOption] = []
         for opt in options:
-            async with self._transaction():
-                vals = await self._option_val_repo.find_by_option_id(opt.id)
+            vals = await self._option_val_repo.find_by_option_id(opt.id)
             if vals:
                 priced_options.append(opt)
 
@@ -94,10 +130,8 @@ class ProductService:
             "stock": total_stock,
         }
 
-    async def to_dto(self, product: Product) -> dict:
-        """Serialize product to dict (attribute + price/stock).
-        Chuyển product sang dict gồm thuộc tính + giá/tồn kho.
-        """
+    async def _to_dto(self, product: Product) -> dict:
+        """Serialize product to dict. Chạy trong transaction đang mở (không tự mở)."""
         attributes = await self._get_attributes_dict(product.id)
         price_stock = await self._get_price_and_stock(product.id)
         return {
@@ -112,21 +146,33 @@ class ProductService:
             "discountPercentage": product.discount_percentage,
         }
 
+    async def to_dto(self, product: Product) -> dict:
+        """Serialize product to dict trong MỘT transaction (dùng sau các write method)."""
+        async with self._transaction():
+            return await self._to_dto(product)
+
     # ─── Public read methods ────────────────────────────────────────
 
     async def get_all_product_dtos(self) -> list[dict]:
+        cached = await self._cache_get_json(self._CACHE_ALL)
+        if cached is not None:
+            return cached
         async with self._transaction():
             products = await self._product_repo.find_all()
-        result = []
-        for p in products:
-            if not p.is_delete:
-                result.append(await self.to_dto(p))
+            result = [await self._to_dto(p) for p in products if not p.is_delete]
+        await self._cache_set_json(self._CACHE_ALL, result)
         return result
+
+    async def count_products(self) -> int:
+        # Total non-deleted products (for FE pagination).
+        # Tổng sản phẩm chưa xóa mềm (phục vụ phân trang FE).
+        async with self._transaction():
+            return await self._product_repo.count_active()
 
     async def get_paginated_product_dtos(self, page: int, limit: int) -> list[dict]:
         async with self._transaction():
             products = await self._product_repo.find_all_paginated(page, limit)
-        return [await self.to_dto(p) for p in products]
+            return [await self._to_dto(p) for p in products]
 
     async def get_product_by_id(self, product_id: int) -> Product:
         async with self._transaction():
@@ -136,52 +182,85 @@ class ProductService:
         return product
 
     async def get_product_dto_by_id(self, product_id: int) -> dict:
-        product = await self.get_product_by_id(product_id)
-        return await self.to_dto(product)
+        key = self._product_key(product_id)
+        cached = await self._cache_get_json(key)
+        if cached is not None:
+            return cached
+        async with self._transaction():
+            product = await self._product_repo.find(product_id)
+            if not product or product.is_delete:
+                raise AppException("E10200")
+            dto = await self._to_dto(product)
+        await self._cache_set_json(key, dto)
+        return dto
 
     async def find_products_by_category_id(self, category_id: int) -> list[Product]:
         async with self._transaction():
             return await self._product_repo.find_by_category_id(category_id)
 
     async def get_products_by_category_id(self, category_id: int) -> list[dict]:
-        products = await self.find_products_by_category_id(category_id)
-        result = []
-        for p in products:
-            if not p.is_delete:
-                result.append(await self.to_dto(p))
-        return result
+        async with self._transaction():
+            products = await self._product_repo.find_by_category_id(category_id)
+            return [await self._to_dto(p) for p in products if not p.is_delete]
 
     async def search_products_by_keywords(self, keywords: str) -> list[dict]:
         async with self._transaction():
             products = await self._product_repo.search_by_keywords(keywords)
-        return [await self.to_dto(p) for p in products]
+            return [await self._to_dto(p) for p in products]
 
     async def get_option_default(self, product: Product) -> dict:
-        opt = await self._find_option_default(product.id)
+        async with self._transaction():
+            opt = await self._find_option_default(product.id)
         if not opt:
             raise AppException("E10204")
         return {"id": opt.id, "prices": opt.price, "stock": opt.stock}
 
+    async def get_cart_item_detail(self, option_id: int) -> dict:
+        """Return product name + option price + option values for a cart line.
+        Trả về tên sản phẩm + đơn giá option + các giá trị option cho một dòng giỏ hàng.
+        Gom trong MỘT transaction để tránh N+1 khi render giỏ hàng.
+        """
+        async with self._transaction():
+            opt = await self._option_repo.find(option_id)
+            if not opt:
+                raise AppException("E10502")
+            product = await self._product_repo.find(opt.product_id)
+
+            option_vals: dict[str, str] = {}
+            opt_values = await self._option_val_repo.find_by_option_id(option_id)
+            for ov in opt_values:
+                pav = await self._attr_val_repo.find(ov.attribute_value_id)
+                if not pav:
+                    continue
+                attr = await self._attr_repo.find(pav.attribute_id)
+                if attr:
+                    option_vals[attr.name] = pav.value
+
+            return {
+                "productId": opt.product_id,
+                "productName": product.name if product else None,
+                "price": float(opt.price) if opt.price is not None else None,
+                "optionValues": option_vals,
+            }
+
     async def get_values_by_option_id(self, option_id: int) -> dict[str, str]:
-        """Return {attr_name: value} for an option.
+        """Return {attr_name: value} for an option (một transaction duy nhất).
         Trả về {tên thuộc tính: giá trị} cho một option.
         """
         async with self._transaction():
             opt = await self._option_repo.find(option_id)
-        if not opt:
-            raise AppException("E10502")
-        async with self._transaction():
+            if not opt:
+                raise AppException("E10502")
             option_vals = await self._option_val_repo.find_by_option_id(option_id)
-        result: dict[str, str] = {}
-        for ov in option_vals:
-            async with self._transaction():
+            result: dict[str, str] = {}
+            for ov in option_vals:
                 pav = await self._attr_val_repo.find(ov.attribute_value_id)
-            if pav:
-                async with self._transaction():
-                    attr = await self._attr_repo.find(pav.attribute_id)
+                if not pav:
+                    continue
+                attr = await self._attr_repo.find(pav.attribute_id)
                 if attr:
                     result[attr.name] = pav.value
-        return result
+            return result
 
     # ─── Write methods ──────────────────────────────────────────────
 
@@ -236,6 +315,7 @@ class ProductService:
             opt = ProductOption(product_id=product.id, price=price, stock=stock)
             await self._option_repo.save(opt)
 
+        await self._invalidate_product_cache(product.id)
         return await self.to_dto(product)
 
     async def update_product(self, product_id: int, data: dict) -> dict:
@@ -305,6 +385,7 @@ class ProductService:
                     if v.value not in values:
                         await self._attr_val_repo.delete(v)
 
+        await self._invalidate_product_cache(product_id)
         return await self.to_dto(db_product)
 
     async def delete_product(self, product_id: int) -> None:
@@ -318,6 +399,7 @@ class ProductService:
             if db_product:
                 db_product.is_delete = True
                 await self._product_repo.save(db_product)
+        await self._invalidate_product_cache(product_id)
 
     async def update_or_create_product_attributes_and_options(
         self, product_id: int, json_data: dict
@@ -402,6 +484,8 @@ class ProductService:
                             option_id=opt.id, attribute_value_id=pav.id
                         )
                         await self._option_val_repo.save(pov)
+
+        await self._invalidate_product_cache(product_id)
 
     async def find_product_option_by_json(
         self, product: Product, data: dict

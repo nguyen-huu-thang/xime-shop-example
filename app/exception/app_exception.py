@@ -1,5 +1,5 @@
 """
-AppException — port từ src/Exception/AppException.php.
+AppException - port từ src/Exception/AppException.php.
 
     raise AppException("E2021")                         # message mặc định
     raise AppException("E10711", "Dữ liệu sai định dạng")  # override message

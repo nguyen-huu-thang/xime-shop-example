@@ -1,5 +1,5 @@
 """
-ProductOptionService — quản lý option sản phẩm (1 SKU = 1 tổ hợp giá + tồn kho).
+ProductOptionService - quản lý option sản phẩm (1 SKU = 1 tổ hợp giá + tồn kho).
 Port từ ProductOptionService.php.
 """
 from __future__ import annotations

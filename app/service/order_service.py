@@ -1,9 +1,13 @@
 """
-OrderService — quản lý đơn hàng.
+OrderService - quản lý đơn hàng.
 Port từ OrderService.php.
 
-create_order dùng single transaction để đảm bảo atomicity:
+create_order dùng MỘT transaction để đảm bảo atomicity:
   order + order_details + giảm tồn kho + xóa cart items.
+
+Các method đọc gom truy vấn trong một transaction và batch-load order_details để tránh N+1.
+Mọi method trả về tuple `(Order, list[OrderDetail])` (hoặc list các tuple); controller map sang
+OrderResponse DTO.
 """
 from __future__ import annotations
 
@@ -21,6 +25,7 @@ from app.repository.product_attribute_repository import ProductAttributeReposito
 from app.repository.product_attribute_value_repository import ProductAttributeValueRepository
 from app.repository.product_option_repository import ProductOptionRepository
 from app.repository.product_option_value_repository import ProductOptionValueRepository
+from app.repository.product_repository import ProductRepository
 from app.service.authorization_service import AuthorizationService
 
 
@@ -31,6 +36,7 @@ class OrderService:
         order_repository: OrderRepository,
         order_detail_repository: OrderDetailRepository,
         cart_repository: CartRepository,
+        product_repository: ProductRepository,
         product_option_repository: ProductOptionRepository,
         product_option_value_repository: ProductOptionValueRepository,
         product_attribute_value_repository: ProductAttributeValueRepository,
@@ -41,174 +47,169 @@ class OrderService:
         self._order_repo = order_repository
         self._detail_repo = order_detail_repository
         self._cart_repo = cart_repository
+        self._product_repo = product_repository
         self._option_repo = product_option_repository
         self._option_val_repo = product_option_value_repository
         self._attr_val_repo = product_attribute_value_repository
         self._attr_repo = product_attribute_repository
         self._authz = authorization_service
 
-    async def _build_order_dto(self, order: Order) -> list:
-        async with self._transaction():
-            details = await self._detail_repo.find_by_order_id(order.id)
-        arr = [
-            [d.id, d.name, float(d.price), d.quantity, d.url]
-            for d in details
-        ]
-        return [order, arr]
+    # ── Read helpers ───────────────────────────────────────────────────────────
 
-    async def get_all_orders(self) -> list:
+    async def _attach_details(
+        self, orders: list[Order]
+    ) -> list[tuple[Order, list[OrderDetail]]]:
+        """Batch-load order_details cho danh sách order (một truy vấn, tránh N+1).
+        Phải được gọi BÊN TRONG một transaction đang mở.
+        """
+        if not orders:
+            return []
+        order_ids = [o.id for o in orders]
+        details = await self._detail_repo.find_by_order_ids(order_ids)
+        by_order: dict[int, list[OrderDetail]] = {}
+        for d in details:
+            by_order.setdefault(d.order_id, []).append(d)
+        return [(o, by_order.get(o.id, [])) for o in orders]
+
+    async def get_all_orders(self) -> list[tuple[Order, list[OrderDetail]]]:
         async with self._transaction():
             orders = await self._order_repo.find_all()
-        result = []
-        for order in orders:
-            result.append(await self._build_order_dto(order))
-        return result
+            return await self._attach_details(orders)
 
-    async def get_paginated_orders(self, page: int, limit: int) -> list:
+    async def count_orders(self) -> int:
+        # Total orders (for FE pagination).
+        # Tổng số đơn hàng (phục vụ phân trang FE).
+        async with self._transaction():
+            return await self._order_repo.count()
+
+    async def get_paginated_orders(
+        self, page: int, limit: int
+    ) -> list[tuple[Order, list[OrderDetail]]]:
         async with self._transaction():
             orders = await self._order_repo.find_all_paginated(page, limit)
-        result = []
-        for order in orders:
-            result.append(await self._build_order_dto(order))
-        return result
+            return await self._attach_details(orders)
 
-    async def find_orders_by_user(self, user_id: int) -> list:
+    async def find_orders_by_user(
+        self, user_id: int
+    ) -> list[tuple[Order, list[OrderDetail]]]:
         async with self._transaction():
             orders = await self._order_repo.find_by_user_id(user_id)
-        result = []
-        for order in orders:
-            result.append(await self._build_order_dto(order))
-        return result
+            return await self._attach_details(orders)
 
     async def find_order_by_id(self, order_id: int) -> Order | None:
         async with self._transaction():
             return await self._order_repo.find(order_id)
 
-    async def get_order_by_id(self, order_id: int) -> list:
+    async def get_order_by_id(self, order_id: int) -> tuple[Order, list[OrderDetail]]:
         async with self._transaction():
             order = await self._order_repo.find(order_id)
-        if not order:
-            raise AppException("E10500")
-        return await self._build_order_dto(order)
+            if not order:
+                raise AppException("E10500")
+            details = await self._detail_repo.find_by_order_id(order_id)
+            return order, details
 
-    async def _get_option_attributes(self, option_id: int) -> str:
+    # ── Order creation ─────────────────────────────────────────────────────────
+
+    async def _build_option_attributes(self, option_id: int) -> str:
         """Build JSON attribute snapshot for OrderDetail (mirrors getValuesByOption).
-        Build JSON snapshot thuộc tính cho OrderDetail.
+        Build JSON snapshot thuộc tính cho OrderDetail. Chạy trong transaction đang mở.
         """
-        async with self._transaction():
-            opt_vals = await self._option_val_repo.find_by_option_id(option_id)
+        opt_vals = await self._option_val_repo.find_by_option_id(option_id)
         result: dict[str, str] = {}
         for ov in opt_vals:
-            async with self._transaction():
-                pav = await self._attr_val_repo.find(ov.attribute_value_id)
-            if pav:
-                async with self._transaction():
-                    attr = await self._attr_repo.find(pav.attribute_id)
-                if attr:
-                    result[attr.name] = pav.value
+            pav = await self._attr_val_repo.find(ov.attribute_value_id)
+            if not pav:
+                continue
+            attr = await self._attr_repo.find(pav.attribute_id)
+            if attr:
+                result[attr.name] = pav.value
         return json.dumps(result)
 
-    async def create_order(self, user_id: int, data: dict) -> list:
-        """Create order + details + decrement stock + clear cart (atomic).
+    async def create_order(
+        self, user_id: int, data: dict
+    ) -> tuple[Order, list[OrderDetail]]:
+        """Create order + details + decrement stock + clear cart (atomic, một transaction).
         Tạo đơn hàng + chi tiết + giảm tồn kho + xóa giỏ trong một transaction.
         """
         cart_ids: list[int] = data.get("cart") or []
         if not cart_ids:
             raise AppException("E10505")
 
-        # Load carts and validate outside write transaction
-        # Load giỏ hàng và validate trước khi mở transaction ghi
         async with self._transaction():
             cart_items = await self._cart_repo.find_by_ids(cart_ids)
-        if not cart_items:
-            raise AppException("E10505")
+            if not cart_items:
+                raise AppException("E10505")
 
-        # Validate stock and calculate subtotal
-        # Kiểm tra tồn kho và tính tổng tiền
-        option_cache: dict[int, object] = {}
-        subtotal = 0.0
-        for item in cart_items:
-            async with self._transaction():
-                opt = await self._option_repo.find(item.product_option_id)
-            if not opt:
-                raise AppException("E10502")
-            if opt.stock < item.quantity:
-                raise AppException("E10506")  # exceeds stock
-            option_cache[item.id] = opt
-            subtotal += item.quantity * float(opt.price or 0)
-
-        # Build attribute snapshots before main transaction
-        # Build snapshot thuộc tính trước transaction ghi
-        attr_snapshots: dict[int, str] = {}
-        for item in cart_items:
-            opt = option_cache[item.id]
-            attr_snapshots[item.id] = await self._get_option_attributes(opt.id)
-
-        async with self._transaction():
             order = Order(
                 user_id=user_id,
                 address=data.get("address", ""),
-                total_amount=subtotal,
+                total_amount=0,
                 payment_method=data.get("paymentMethod") or data.get("payment_method", ""),
                 shipping_status="Đơn hàng đã được tạo",
                 payment_status=False,
             )
             order = await self._order_repo.save(order)
 
-            detail_rows = []
+            details: list[OrderDetail] = []
+            subtotal = 0.0
             for item in cart_items:
-                opt = option_cache[item.id]
-                db_opt = await self._option_repo.find(opt.id)
-                if not db_opt:
+                opt = await self._option_repo.find(item.product_option_id)
+                if not opt:
                     raise AppException("E10502")
-                if db_opt.stock < item.quantity:
-                    raise AppException("E10506")
+                if opt.stock < item.quantity:
+                    raise AppException("E10506")  # exceeds stock / vượt tồn kho
 
-                # Snapshot product name requires loading product
-                # Snapshot tên sản phẩm cần load product
-                from app.entity.product import Product
-                from sqlalchemy import select as sa_select
-                result = await self._order_repo.session.execute(
-                    sa_select(Product).where(Product.id == db_opt.product_id)
-                )
-                product = result.scalar_one_or_none()
+                product = await self._product_repo.find(opt.product_id)
                 if not product:
                     raise AppException("E10200")
 
-                db_opt.stock -= item.quantity
-                await self._option_repo.save(db_opt)
+                # Snapshot attributes before mutating stock
+                # Snapshot thuộc tính trước khi giảm tồn kho
+                attribute = await self._build_option_attributes(opt.id)
 
+                opt.stock -= item.quantity
+                await self._option_repo.save(opt)
+
+                price = float(opt.price or 0)
                 detail = OrderDetail(
                     order_id=order.id,
                     product_id=product.id,
                     name=product.name,
                     quantity=item.quantity,
-                    price=float(db_opt.price or 0),
-                    attribute=attr_snapshots.get(item.id),
+                    price=price,
+                    attribute=attribute,
                     url=None,
                 )
                 detail = await self._detail_repo.save(detail)
-                detail_rows.append([detail.id, detail.name, float(detail.price), detail.quantity, detail.url])
+                details.append(detail)
+                subtotal += item.quantity * price
 
                 # Remove cart item
                 # Xóa cart item
-                cart_db = await self._cart_repo.find(item.id)
-                if cart_db:
-                    await self._cart_repo.delete(cart_db)
+                await self._cart_repo.delete(item)
 
-        return [order, detail_rows]
+            order.total_amount = subtotal
+            await self._order_repo.save(order)
 
-    async def update_order(self, order_id: int, user, address: str) -> list:
+            return order, details
+
+    async def update_order(
+        self, order_id: int, user, address: str
+    ) -> tuple[Order, list[OrderDetail]]:
         """Update order address; check permission (owner or update_shipping_status perm).
         Cập nhật địa chỉ đơn hàng; kiểm tra quyền.
         """
         async with self._transaction():
             order = await self._order_repo.find(order_id)
-        if not order:
-            raise AppException("E10500")
+            if not order:
+                raise AppException("E10500")
+            is_owned = order.user_id == user.id
 
-        is_owned = order.user_id == user.id
-        await self._authz.require(user, "update_shipping_status", target_id=order_id, is_user_owned=is_owned)
+        # authz mở transaction riêng -> gọi ngoài transaction trên để không lồng
+        # authz opens its own transaction -> call outside the block above
+        await self._authz.require(
+            user, "update_shipping_status", target_id=order_id, is_user_owned=is_owned
+        )
 
         async with self._transaction():
             db_order = await self._order_repo.find(order_id)
@@ -216,8 +217,8 @@ class OrderService:
                 raise AppException("E10500")
             db_order.address = address
             await self._order_repo.save(db_order)
-
-        return await self._build_order_dto(db_order)
+            details = await self._detail_repo.find_by_order_id(order_id)
+            return db_order, details
 
     async def delete_order(self, order_id: int) -> None:
         async with self._transaction():

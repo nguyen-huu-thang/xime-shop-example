@@ -9,7 +9,7 @@ from app.dto.request.product_request import (
     ProductCreateRequest,
     ProductUpdateRequest,
 )
-from app.dto.response.token_response import MessageResponse
+from app.dto.response.token_response import CountResponse, MessageResponse
 from app.exception.app_exception import AppException
 from app.security.current_user import require_login
 from app.service.authorization_service import AuthorizationService
@@ -31,6 +31,12 @@ class ProductController:
     @get("")
     async def list(self, page: int = 1, limit: int = 10) -> list[dict]:
         return await self._svc.get_paginated_product_dtos(page, limit)
+
+    @get("/count")
+    async def count(self) -> CountResponse:
+        # Total products for FE pagination (public, mirrors the public list).
+        # Tổng sản phẩm cho phân trang FE (công khai, khớp với list công khai).
+        return CountResponse(total=await self._svc.count_products())
 
     @get("/by-category/{category_id}")
     async def by_category(self, category_id: int) -> list[dict]:

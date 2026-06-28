@@ -32,6 +32,14 @@ class ReviewService:
         async with self._transaction():
             return await self._repo.find_by_product_id(product_id)
 
+    async def get_approved_reviews_by_product(
+        self, product_id: int, page: int, limit: int
+    ) -> list[Review]:
+        # Public listing: only approved reviews of a product (no login required)
+        # Danh sách công khai: chỉ review đã duyệt của sản phẩm (không cần đăng nhập)
+        async with self._transaction():
+            return await self._repo.find_approved_by_product_id(product_id, page, limit)
+
     async def get_reviews_by_user(self, user_id: int) -> list[Review]:
         async with self._transaction():
             return await self._repo.find_by_user_id(user_id)

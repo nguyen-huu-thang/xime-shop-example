@@ -8,7 +8,7 @@ from xime.adapters.web.routing import delete, get, post, put
 
 from app.dto.request.file_request import FileUpdateRequest
 from app.dto.response.file_response import FileResponse
-from app.dto.response.token_response import MessageResponse
+from app.dto.response.token_response import CountResponse, MessageResponse
 from app.exception.app_exception import AppException
 from app.security.current_user import require_login
 from app.service.authorization_service import AuthorizationService
@@ -40,6 +40,14 @@ class FileController:
         await self._authz.require(user, "view_files")
         files = await self._svc.get_files_paginated(page, limit)
         return [FileResponse.model_validate(f) for f in files]
+
+    @get("/count")
+    async def count(self) -> CountResponse:
+        # Total files for FE pagination (needs view_files).
+        # Tổng số tệp cho phân trang FE (cần quyền view_files).
+        user = require_login()
+        await self._authz.require(user, "view_files")
+        return CountResponse(total=await self._svc.count_files())
 
     @get("/inactive")
     async def list_inactive(self) -> list[FileResponse]:
@@ -82,15 +90,13 @@ class FileController:
         product_id: int | None = Form(default=None, alias="productId"),
         review_id: int | None = Form(default=None, alias="reviewId"),
     ) -> dict:
-        # Multipart upload: read file bytes and delegate to service
-        # Upload multipart: đọc bytes file và chuyển cho service xử lý
+        # Multipart upload: delegate streaming to the service (no full RAM buffer)
+        # Upload multipart: service stream thẳng vào storage, không nạp hết vào RAM
         user = require_login()
 
         if not file or not file.filename:
             raise AppException("E5001")
 
-        content = await file.read()
-        file_size = len(content)
         original_name = file.filename
         _, ext = os.path.splitext(original_name)
         extension = ext.lstrip(".").lower()
@@ -106,14 +112,17 @@ class FileController:
             data["reviewId"] = review_id
 
         db_file = await self._svc.upload_file(
-            file_content=content,
+            upload_file=file,
             original_name=original_name,
             extension=extension,
-            file_size=file_size,
             user_id=user.id,
             data=data,
         )
-        return {"message": "File uploaded successfully!", "file": db_file.file_path}
+        return {
+            "message": "File uploaded successfully!",
+            "id": db_file.id,
+            "file": db_file.file_path,
+        }
 
     @put("/{id}")
     async def update(self, id: int, body: FileUpdateRequest) -> FileResponse:

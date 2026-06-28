@@ -1,5 +1,5 @@
 """
-UserPermissionService — quản lý quyền trực tiếp của user.
+UserPermissionService - quản lý quyền trực tiếp của user.
 Port từ UserPermissionService.php.
 """
 from __future__ import annotations
@@ -29,7 +29,7 @@ class UserPermissionService:
 
     async def assign_permissions(self, user_id: int, permissions: dict) -> list[dict]:
         """Assign permissions to a user (bulk).
-        Gán quyền cho user — bulk theo dict {perm_name: {is_active, is_denied, target}}.
+        Gán quyền cho user - bulk theo dict {perm_name: {is_active, is_denied, target}}.
         """
         user = await self._user_svc.get_user_by_id(user_id)
         if not user:
@@ -86,7 +86,7 @@ class UserPermissionService:
 
     async def update_permission(self, user_id: int, permissions: dict) -> list[dict]:
         """Update existing user permissions (bulk).
-        Cập nhật quyền hiện có của user — bulk.
+        Cập nhật quyền hiện có của user - bulk.
         """
         user = await self._user_svc.get_user_by_id(user_id)
         if not user:

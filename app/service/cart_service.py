@@ -1,5 +1,5 @@
 """
-CartService — quản lý giỏ hàng.
+CartService - quản lý giỏ hàng.
 Port từ CartService.php.
 """
 from __future__ import annotations
@@ -29,6 +29,12 @@ class CartService:
     async def get_all_cart_items(self) -> list[Cart]:
         async with self._transaction():
             return await self._repo.find_all()
+
+    async def count_cart_items(self) -> int:
+        # Total cart items across all users (for FE pagination on admin list).
+        # Tổng số item giỏ hàng của mọi user (phục vụ phân trang FE trang admin).
+        async with self._transaction():
+            return await self._repo.count()
 
     async def get_paginated_cart_items(self, page: int, limit: int) -> list[Cart]:
         async with self._transaction():

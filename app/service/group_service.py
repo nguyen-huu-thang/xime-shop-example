@@ -1,5 +1,5 @@
 """
-GroupService — quản lý nhóm người dùng.
+GroupService - quản lý nhóm người dùng.
 Port từ GroupService.php.
 """
 from __future__ import annotations

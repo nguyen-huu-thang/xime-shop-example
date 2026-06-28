@@ -12,7 +12,7 @@ configure_openapi(
         title="Shop Backend",
         version="1.0.0",
         description=(
-            "**Shop Backend** — bản migrate từ PHP/Symfony sang Python trên framework Xime.\n\n"
+            "**Shop Backend** - bản migrate từ PHP/Symfony sang Python trên framework Xime.\n\n"
             "Dự án tham chiếu/kiểm thử cho framework Xime (kiến trúc đa lớp).\n\n"
             "**Xác thực:** Đăng nhập qua `POST /api/login`, lấy `accessToken`,\n"
             "dán vào ô Authorize (Bearer) để gọi các API yêu cầu quyền."
@@ -21,6 +21,7 @@ configure_openapi(
         security=JwtBearer(),
         public_paths=[
             "/api/login",
+            "/api/register",
             "/api/refresh-token",
             "/api/health",
             "/docs",

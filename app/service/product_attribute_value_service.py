@@ -1,5 +1,5 @@
 """
-ProductAttributeValueService — quản lý giá trị thuộc tính sản phẩm (vd: 40, đỏ...).
+ProductAttributeValueService - quản lý giá trị thuộc tính sản phẩm (vd: 40, đỏ...).
 Port từ ProductAttributeValueService.php.
 """
 from __future__ import annotations

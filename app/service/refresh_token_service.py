@@ -1,5 +1,5 @@
 """
-RefreshTokenService — quản lý refresh token trong DB.
+RefreshTokenService - quản lý refresh token trong DB.
 Port từ RefreshTokenService.php.
 """
 from __future__ import annotations
@@ -38,7 +38,7 @@ class RefreshTokenService:
 
     async def delete_token(self, jti: str) -> None:
         """Remove a refresh token (called on logout).
-        Xóa refresh token — gọi khi đăng xuất.
+        Xóa refresh token - gọi khi đăng xuất.
         """
         async with self._transaction():
             token = await self._repo.find(jti)

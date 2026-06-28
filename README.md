@@ -127,5 +127,11 @@ app/
 | Catalog | `/api/categories`, `/api/products` | Danh mục, sản phẩm |
 | Mua hàng | `/api/cart`, `/api/orders`, `/api/coupons` | Giỏ hàng, đơn hàng |
 | Tương tác | `/api/reviews`, `/api/wishlist`, `/api/notifications` | Đánh giá, yêu thích |
-| File | `/api/files` | Upload/quản lý file |
+| File | `/api/files` | Upload/quản lý file (stream tải xuống qua `/media/{key}`, hỗ trợ HTTP Range) |
 | Tìm kiếm | `/api/search` | Tìm kiếm sản phẩm |
+| Dashboard | `/api/dashboard/stats` | Thống kê quản trị (doanh thu, đơn, bán chạy, tồn kho thấp) |
+
+> **Xác thực (cập nhật):** `POST /api/login` trả `accessToken` trong body (client lưu RAM) và đặt
+> refresh token vào **httpOnly cookie** path-scoped `/api/refresh-token`. `POST /api/refresh-token`
+> đọc refresh từ cookie, cấp access mới và **xoay** refresh token (đặt lại cookie). JS không đọc được
+> refresh token; cookie không gửi kèm các API khác.

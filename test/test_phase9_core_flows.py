@@ -1,12 +1,12 @@
 """
-Phase 9 — Test các luồng cốt lõi: auth, phân quyền, service layer.
+Phase 9 - Test các luồng cốt lõi: auth, phân quyền, service layer.
 
 Dùng TestApplication + DI overrides để test mà không cần DB thật.
 Unit test cho logic không phụ thuộc DB.
 """
 import pytest
 
-import app.config.web  # noqa: F401 — side effect: configure_controllers + openapi
+import app.config.web  # noqa: F401 - side effect: configure_controllers + openapi
 from app.exception.app_exception import AppException
 from app.exception.error_code import ERROR_CODES, get_error
 from app.service.search_service import SearchService
@@ -127,7 +127,7 @@ def test_file_path_structure():
     class _FakeService:
         pass
 
-    # Instantiate without real DI — just call the private methods
+    # Instantiate without real DI - just call the private methods
     # Kiểm tra logic tạo đường dẫn file mà không cần DB
     svc = object.__new__(FileService)
 

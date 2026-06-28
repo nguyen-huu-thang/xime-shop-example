@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from sqlalchemy import or_, select
+from sqlalchemy import func, or_, select
 
 from app.entity.product import Product
 from app.repository.base_repository import BaseRepository
@@ -8,6 +8,14 @@ from app.repository.base_repository import BaseRepository
 
 class ProductRepository(BaseRepository[Product]):
     model = Product
+
+    async def count_active(self) -> int:
+        # Đếm sản phẩm chưa bị xóa mềm.
+        # Count non-soft-deleted products.
+        result = await self.session.execute(
+            select(func.count()).select_from(Product).where(Product.is_delete.is_(False))
+        )
+        return int(result.scalar_one())
 
     async def find_by_category_id(self, category_id: int) -> list[Product]:
         result = await self.session.execute(

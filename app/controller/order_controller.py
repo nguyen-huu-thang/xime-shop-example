@@ -3,31 +3,11 @@ from __future__ import annotations
 from xime.adapters.web.routing import delete, get, post, put
 
 from app.dto.request.order_request import OrderCreateRequest, OrderUpdateRequest
-from app.dto.response.token_response import MessageResponse
-from app.exception.app_exception import AppException
+from app.dto.response.order_response import OrderResponse
+from app.dto.response.token_response import CountResponse, MessageResponse
 from app.security.current_user import require_login
 from app.service.authorization_service import AuthorizationService
 from app.service.order_service import OrderService
-
-
-def _order_to_dict(order_tuple: list) -> dict:
-    """Convert [Order, [[id,name,price,qty,url], ...]] to response dict.
-    Chuyển tuple [Order, details] sang dict phản hồi.
-    """
-    order, details = order_tuple[0], order_tuple[1]
-    return {
-        "id": order.id,
-        "userId": order.user_id,
-        "address": order.address,
-        "totalAmount": float(order.total_amount),
-        "paymentMethod": order.payment_method,
-        "shippingStatus": order.shipping_status,
-        "paymentStatus": order.payment_status,
-        "details": [
-            {"id": d[0], "name": d[1], "price": d[2], "quantity": d[3], "url": d[4]}
-            for d in details
-        ],
-    }
 
 
 class OrderController:
@@ -43,35 +23,43 @@ class OrderController:
         self._authz = authorization_service
 
     @get("/all")
-    async def list(self, page: int = 1, limit: int = 10) -> list[dict]:
+    async def list(self, page: int = 1, limit: int = 10) -> list[OrderResponse]:
         user = require_login()
         await self._authz.require(user, "view_orders")
         orders = await self._svc.get_paginated_orders(page, limit)
-        return [_order_to_dict(o) for o in orders]
+        return [OrderResponse.from_entities(o, d) for o, d in orders]
+
+    @get("/count")
+    async def count(self) -> CountResponse:
+        # Total orders for FE pagination (admin list, needs view_orders).
+        # Tổng số đơn cho phân trang FE (trang admin, cần quyền view_orders).
+        user = require_login()
+        await self._authz.require(user, "view_orders")
+        return CountResponse(total=await self._svc.count_orders())
 
     @get("")
-    async def user_orders(self) -> list[dict]:
+    async def user_orders(self) -> list[OrderResponse]:
         user = require_login()
         orders = await self._svc.find_orders_by_user(user.id)
-        return [_order_to_dict(o) for o in orders]
+        return [OrderResponse.from_entities(o, d) for o, d in orders]
 
     @get("/{id}")
-    async def detail(self, id: int) -> dict:
-        order_tuple = await self._svc.get_order_by_id(id)
-        return _order_to_dict(order_tuple)
+    async def detail(self, id: int) -> OrderResponse:
+        order, details = await self._svc.get_order_by_id(id)
+        return OrderResponse.from_entities(order, details)
 
     @post("", status_code=201)
-    async def create(self, body: OrderCreateRequest) -> dict:
+    async def create(self, body: OrderCreateRequest) -> OrderResponse:
         user = require_login()
         data = body.model_dump(by_alias=False)
-        order_tuple = await self._svc.create_order(user.id, data)
-        return _order_to_dict(order_tuple)
+        order, details = await self._svc.create_order(user.id, data)
+        return OrderResponse.from_entities(order, details)
 
     @put("/{id}")
-    async def update(self, id: int, body: OrderUpdateRequest) -> dict:
+    async def update(self, id: int, body: OrderUpdateRequest) -> OrderResponse:
         user = require_login()
-        order_tuple = await self._svc.update_order(id, user, body.address)
-        return _order_to_dict(order_tuple)
+        order, details = await self._svc.update_order(id, user, body.address)
+        return OrderResponse.from_entities(order, details)
 
     @delete("/{id}")
     async def remove(self, id: int) -> MessageResponse:

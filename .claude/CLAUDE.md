@@ -1,7 +1,8 @@
 # Shop Backend (Python/Xime) — Hướng dẫn phiên làm việc
 
 Dự án **migrate shop backend từ PHP/Symfony sang Python** dùng framework **Xime**.
-Dự án đang ở **giai đoạn lập kế hoạch** — chưa có code triển khai, mới có tài liệu thiết kế.
+Dự án đã **hoàn thiện migrate (Phase 0-9)** và đang ở **pha tối ưu** (đã có code đầy đủ, test pass).
+Xem mục "Trạng thái hiện tại" trong [`../CLAUDE.md`](../CLAUDE.md) để biết các cải tiến đã làm.
 
 > ⚠️ **Quyết định kiến trúc quan trọng:** Dự án này dùng **kiến trúc đa lớp (layered)** giống
 > dự án PHP gốc, **KHÔNG** dùng Hexagonal/Clean như Xime khuyến nghị. Đọc kỹ

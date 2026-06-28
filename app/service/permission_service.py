@@ -1,5 +1,5 @@
 """
-PermissionService — quản lý quyền hệ thống.
+PermissionService - quản lý quyền hệ thống.
 Port từ PermissionService.php.
 """
 from __future__ import annotations

@@ -45,8 +45,17 @@ Framework tự thêm `./app` vào `sys.path`.
 
 ## Trạng thái hiện tại
 
-**Giai đoạn lập kế hoạch** — chưa có code triển khai. Bước tiếp theo: thực hiện
-[Phase 0](.claude/docs/ke-hoach/phase-0-scaffold.md).
+**Đã hoàn thiện migrate (Phase 0-9)** và đang ở **pha tối ưu**: app chạy được, đầy đủ
+controller/service/repository/entity, test pass. Các cải tiến đã làm sau migrate:
+
+- Auth: refresh token chuyển sang **httpOnly cookie path-scoped** (`/api/refresh-token`),
+  access token trả body; `/refresh-token` xoay refresh token (rotation).
+- `JwtMiddleware` chuyển sang **pure-ASGI** (sửa rò identity giữa request).
+- `order_service` + `product_service`: gộp transaction, bỏ N+1; thêm `OrderResponse` DTO.
+- **Storage starter** (localfs) cho upload + endpoint stream `/media/{key}` (HTTP Range).
+- **Cache** catalog (InMemoryCacheService, đổi sang Redis được) + invalidation.
+- **Dashboard** thống kê: `GET /api/dashboard/stats`.
+- Vá bug: thiếu quyền `view_files`/`delete_file` trong seed.
 
 
 ## framework issues

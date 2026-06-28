@@ -32,11 +32,12 @@ class WishlistController:
 
     @get("")
     async def user_wishlist(self) -> list[dict]:
-        # Returns products in the current user's wishlist (mirrors PHP getProductsByUser)
-        # Trả về danh sách sản phẩm trong wishlist của user hiện tại
+        # Returns the current user's wishlist lines, each with its wishlistId + productId
+        # so the client can render and delete entries.
+        # Trả về các dòng wishlist của user hiện tại, mỗi dòng kèm wishlistId + productId
+        # để client hiển thị và xóa được.
         user = require_login()
-        products = await self._svc.get_products_by_user(user.id)
-        return [{"id": p.id, "name": p.name} for p in products]
+        return await self._svc.get_user_wishlist_detail(user.id)
 
     @get("/{id}")
     async def detail(self, id: int) -> WishlistResponse:

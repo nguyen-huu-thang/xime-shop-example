@@ -4,8 +4,8 @@ from app.entity.list_table import ListTable
 from app.exception.app_exception import AppException
 from app.repository.list_table_repository import ListTableRepository
 
-# Static list of all table names — mirrors PHP ListTableService::syncListTable
-# Danh sách tên bảng tĩnh — giống PHP ListTableService::syncListTable
+# Static list of all table names - mirrors PHP ListTableService::syncListTable
+# Danh sách tên bảng tĩnh - giống PHP ListTableService::syncListTable
 _TABLE_DESCRIPTIONS: dict[str, str] = {
     "users": "Chứa thông tin của người dùng, bao gồm tài khoản, mật khẩu và các thông tin liên hệ.",
     "permissions": "Lưu giữ các quyền hạn của người dùng.",
@@ -72,8 +72,8 @@ class ListTableService:
                 await self._repo.delete(item)
 
     async def sync_list_table(self) -> dict:
-        # Sync static table list to DB — idempotent
-        # Đồng bộ danh sách bảng tĩnh vào DB — có thể chạy nhiều lần
+        # Sync static table list to DB - idempotent
+        # Đồng bộ danh sách bảng tĩnh vào DB - có thể chạy nhiều lần
         async with self._transaction():
             existing = await self._repo.find_all()
         existing_ids = {t.id for t in existing}

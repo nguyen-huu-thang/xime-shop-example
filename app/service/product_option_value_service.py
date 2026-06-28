@@ -1,5 +1,5 @@
 """
-ProductOptionValueService — bảng nối option ↔ attribute_value.
+ProductOptionValueService - bảng nối option ↔ attribute_value.
 Port từ ProductOptionValueService.php.
 """
 from __future__ import annotations

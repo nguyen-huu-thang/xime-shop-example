@@ -1,5 +1,5 @@
 """
-Exception handler — map AppException (và lỗi validation) → JSON response.
+Exception handler - map AppException (và lỗi validation) → JSON response.
 
 Framework Xime chưa có hook public để add exception handler, nên ta đăng ký
 trực tiếp lên FastAPI app thông qua ShopWebAdapter.build_app() (xem

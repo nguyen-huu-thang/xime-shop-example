@@ -1,5 +1,5 @@
 """
-AuthenticationService — tạo/xác thực JWT, refresh, logout.
+AuthenticationService - tạo/xác thực JWT, refresh, logout.
 Port từ AuthenticationService.php (HS256, claims: jti/uid/type/refreshId/reuseCount).
 """
 from __future__ import annotations
@@ -56,7 +56,7 @@ class AuthenticationService:
         now = datetime.now(UTC)
         ttl = self._access_ttl if token_type == "access" else self._refresh_ttl
         expires_at = now + timedelta(seconds=ttl)
-        # 64-char hex id — same as PHP: bin2hex(random_bytes(32))
+        # 64-char hex id - same as PHP: bin2hex(random_bytes(32))
         jti = secrets.token_hex(32)
 
         payload: dict = {
@@ -86,7 +86,7 @@ class AuthenticationService:
     # ── Token validation ───────────────────────────────────────────────────────
 
     def validate_token(self, token_str: str) -> dict:
-        """Parse and validate JWT signature + claims. Sync — no DB.
+        """Parse and validate JWT signature + claims. Sync - no DB.
         Xác thực chữ ký và claims của JWT. Không cần DB.
         """
         try:
@@ -106,7 +106,7 @@ class AuthenticationService:
 
     def extract_token_id(self, token_str: str) -> str | None:
         """Extract jti from token string. Returns None on any error.
-        Lấy jti từ chuỗi token — trả None nếu có lỗi.
+        Lấy jti từ chuỗi token - trả None nếu có lỗi.
         """
         try:
             return self.validate_token(token_str).get("jti")
@@ -115,18 +115,27 @@ class AuthenticationService:
 
     # ── Auth flows ─────────────────────────────────────────────────────────────
 
-    async def refresh_access_token(self, refresh_token_str: str) -> str:
-        """Issue a new access token from a valid refresh token.
-        Cấp access token mới từ refresh token hợp lệ.
+    async def rotate_tokens(self, refresh_token_str: str) -> tuple[str, str]:
+        """Validate a refresh token, then issue a fresh access + a rotated refresh token.
+
+        Trả về (access_token, new_refresh_token). Refresh token cũ bị thu hồi (one-time use):
+        mỗi lần gọi /refresh-token vừa cấp access mới (body) vừa xoay refresh mới (đặt lại
+        cookie). Refresh mới có TTL trượt (60 ngày kể từ bây giờ) nên phiên duy trì khi người
+        dùng còn hoạt động, tối đa tới mốc 60 ngày không refresh thì hết hạn.
+
+        Ghi chú: bản PHP gốc giới hạn reuseCount <= 12 cho thao tác xoay refresh thủ công.
+        Khi gộp xoay vào mỗi lần refresh access, giới hạn đó sẽ buộc đăng nhập lại sau ~12 lần
+        nên ta bỏ chặn cứng; vẫn tăng reuseCount để phục vụ audit/phát hiện bất thường.
         """
         claims = self.validate_token(refresh_token_str)
         if claims.get("type") != "refresh":
             raise AppException("E2050")
 
-        jti: str = claims["jti"]
+        old_jti: str = claims["jti"]
         uid: int = claims["uid"]
+        reuse_count: int = claims.get("reuseCount", 0)
 
-        stored = await self._refresh_svc.get_token_by_id(jti)
+        stored = await self._refresh_svc.get_token_by_id(old_jti)
         if not stored:
             raise AppException("E2050")
         if stored.expires_at < datetime.now(UTC):
@@ -136,7 +145,19 @@ class AuthenticationService:
         if not user:
             raise AppException("E1004")
 
-        return await self.create_token(user, "access", jti)
+        # Issue rotated refresh first, then an access token referencing it.
+        # Cấp refresh mới trước, sau đó access token tham chiếu tới nó.
+        new_refresh = await self.create_token(user, "refresh", reuse_count=reuse_count + 1)
+        new_refresh_id = self.extract_token_id(new_refresh)
+        if not new_refresh_id:
+            raise RuntimeError("Failed to extract rotated refresh token id")
+        access_token = await self.create_token(user, "access", new_refresh_id)
+
+        # Revoke the old refresh token so it cannot be reused.
+        # Thu hồi refresh token cũ để không thể tái sử dụng.
+        await self._refresh_svc.delete_token(old_jti)
+
+        return access_token, new_refresh
 
     async def logout(self, access_token_str: str) -> None:
         """Blacklist access token + delete its paired refresh token.
@@ -154,27 +175,3 @@ class AuthenticationService:
         expires_at = datetime.fromtimestamp(exp_ts, UTC)
         await self._blacklist_svc.add_token(jti, expires_at)
         await self._refresh_svc.delete_token(refresh_id)
-
-    async def refresh_refresh_token(self, refresh_token_str: str) -> str:
-        """Issue a new refresh token, incrementing reuseCount (max 12).
-        Cấp refresh token mới, tăng reuseCount — giới hạn 12 lần làm mới.
-        """
-        claims = self.validate_token(refresh_token_str)
-        if claims.get("type") != "refresh":
-            raise AppException("E2050")
-
-        jti: str = claims["jti"]
-        reuse_count: int = claims.get("reuseCount", 0)
-        uid: int = claims["uid"]
-
-        stored = await self._refresh_svc.get_token_by_id(jti)
-        if not stored or reuse_count > 12:
-            raise AppException("E2050")
-        if stored.expires_at < datetime.now(UTC):
-            raise AppException("E2051")
-
-        user = await self._user_svc.get_user_by_id(uid)
-        if not user:
-            raise AppException("E1004")
-
-        return await self.create_token(user, "refresh", reuse_count=reuse_count + 1)

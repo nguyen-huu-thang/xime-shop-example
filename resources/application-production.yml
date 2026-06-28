@@ -1,0 +1,20 @@
+# Shop Backend - Override cấu hình cho môi trường PRODUCTION.
+# Kích hoạt bằng biến môi trường: XIME_ENV=production (hoặc APP_ENV=production).
+# File này merge ĐÈ lên application.yml (deep merge), chỉ ghi các key khác với base.
+# Không commit thông tin nhạy cảm thật vào đây (dùng application-secret.yml cho secret).
+
+# Cookie refresh token cho ngữ cảnh CROSS-SITE thật (frontend khác domain với backend).
+# samesite=none bắt buộc đi kèm secure=true, và secure yêu cầu backend chạy qua HTTPS.
+# Trên dev (http localhost, same-site) giữ mặc định lax/secure=false ở application.yml.
+cookie:
+  secure: true
+  samesite: "none"
+
+# CORS - chỉ giữ origin prod của frontend (bỏ localhost dev).
+# Đổi domain theo frontend thật khi deploy.
+cors:
+  allow_origins:
+    - "https://shop.scime.click"
+  # TẮT regex dev (không cho khớp localhost/IP LAN ở production - chỉ origin prod ở trên).
+  # Disable the dev regex in production (only the explicit prod origin is allowed).
+  allow_origin_regex: null

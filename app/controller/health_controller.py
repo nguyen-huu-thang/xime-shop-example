@@ -4,7 +4,7 @@ from xime.adapters.web import get
 
 
 class HealthController:
-    """Health-check endpoint — xác minh app + routing hoạt động."""
+    """Health-check endpoint - xác minh app + routing hoạt động."""
 
     prefix = "/api"
     tags = ["health"]

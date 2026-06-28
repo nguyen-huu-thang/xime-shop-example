@@ -1,5 +1,5 @@
 """
-Phase 1 — Test nền tảng.
+Phase 1 - Test nền tảng.
 
 Bao gồm:
 - DB stack: DI build + transaction + AsyncSession (SELECT 1).
@@ -13,7 +13,7 @@ from httpx import ASGITransport, AsyncClient
 from pydantic import BaseModel
 from sqlalchemy import text
 
-import app.config.web  # noqa: F401 — side effect: configure_controllers + openapi
+import app.config.web  # noqa: F401 - side effect: configure_controllers + openapi
 from app.config.dependency import dependency
 from app.exception.app_exception import AppException
 from app.exception.error_code import get_error

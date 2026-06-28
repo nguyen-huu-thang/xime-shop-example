@@ -1,5 +1,5 @@
 """
-Test tích hợp với DB thật — bao gồm test 4.17, 5.9-5.10, 6.11, 7.12, 8.7.
+Test tích hợp với DB thật - bao gồm test 4.17, 5.9-5.10, 6.11, 7.12, 8.7.
 
 Chạy: pytest test/test_integration_db.py -v -s
 
@@ -13,7 +13,7 @@ import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 
-import app.config.web  # noqa: F401 — side effect: configure_controllers + openapi
+import app.config.web  # noqa: F401 - side effect: configure_controllers + openapi
 from app.config.dependency import dependency
 from app.shop_web_adapter import ShopWebAdapter
 from xime.testing import TestApplication
@@ -24,7 +24,7 @@ _S = uuid.uuid4().hex[:6]
 
 
 # ── Context manager: TestApplication + lifespan + client ─────────────────────
-# Routes chỉ được đăng ký khi lifespan_context chạy — phải dùng `async with lifespan_context`.
+# Routes chỉ được đăng ký khi lifespan_context chạy - phải dùng `async with lifespan_context`.
 
 @asynccontextmanager
 async def app_client():
@@ -45,19 +45,52 @@ async def _login(client) -> dict:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 4.17 — Phân quyền
+# 4.17 - Phân quyền
 # ─────────────────────────────────────────────────────────────────────────────
 
 @pytest.mark.asyncio
 async def test_4_17_login_success():
-    """Admin login trả access + refresh token."""
+    """Admin login trả access token (body) + refresh token (httpOnly cookie path-scoped)."""
     async with app_client() as client:
         resp = await client.post("/api/login", json={"username": "admin", "password": "Admin@123"})
     assert resp.status_code == 200
     data = resp.json()
     assert "accessToken" in data
-    assert "refreshToken" in data
-    print(f"\n[4.17] ✓ Login OK — token[:30]: {data['accessToken'][:30]}...")
+    # Refresh token KHÔNG nằm trong body (chỉ trong cookie httpOnly)
+    # Refresh token must NOT be in the body (cookie-only)
+    assert "refreshToken" not in data
+    # Cookie refresh được đặt, httpOnly, path-scoped tới /api/refresh-token
+    # Refresh cookie is set, httpOnly, scoped to /api/refresh-token
+    set_cookie = resp.headers.get("set-cookie", "")
+    assert "refreshToken=" in set_cookie
+    assert "httponly" in set_cookie.lower()
+    assert "/api/refresh-token" in set_cookie
+    print(f"\n[4.17] ✓ Login OK - token[:30]: {data['accessToken'][:30]}...")
+
+
+@pytest.mark.asyncio
+async def test_4_17_refresh_token_rotation():
+    """Refresh qua cookie: cấp access mới + xoay refresh cookie mới; thiếu cookie -> E2050."""
+    async with app_client() as client:
+        login = await client.post("/api/login", json={"username": "admin", "password": "Admin@123"})
+        assert login.status_code == 200
+        first_cookie = login.headers.get("set-cookie", "")
+
+        # Có cookie (AsyncClient tự giữ cookie) -> refresh thành công, cấp access mới + xoay refresh
+        resp = await client.post("/api/refresh-token")
+        assert resp.status_code == 200, resp.text
+        assert "accessToken" in resp.json()
+        rotated_cookie = resp.headers.get("set-cookie", "")
+        assert "refreshToken=" in rotated_cookie
+        assert "/api/refresh-token" in rotated_cookie
+        assert rotated_cookie != first_cookie  # refresh token đã được xoay
+
+    # Không có cookie -> E2050
+    async with app_client() as client:
+        resp = await client.post("/api/refresh-token")
+        assert resp.status_code == 401
+        assert resp.json()["errorKey"] == "E2050"
+    print("[4.17] ✓ Refresh rotation OK + missing cookie -> E2050")
 
 
 @pytest.mark.asyncio
@@ -113,7 +146,7 @@ async def test_4_17_logout():
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 5.9 — Category CRUD
+# 5.9 - Category CRUD
 # ─────────────────────────────────────────────────────────────────────────────
 
 @pytest.mark.asyncio
@@ -189,7 +222,7 @@ async def test_5_09_category_hierarchy():
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 5.10 — Product CRUD
+# 5.10 - Product CRUD
 # ─────────────────────────────────────────────────────────────────────────────
 
 @pytest.mark.asyncio
@@ -247,7 +280,7 @@ async def test_5_10_product_crud():
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 6.11 — Cart + Order end-to-end
+# 6.11 - Cart + Order end-to-end
 # ─────────────────────────────────────────────────────────────────────────────
 
 @pytest.mark.asyncio
@@ -339,7 +372,7 @@ async def test_6_11_cart_order_flow():
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 7.12 — Review, Wishlist, Notification
+# 7.12 - Review, Wishlist, Notification
 # ─────────────────────────────────────────────────────────────────────────────
 
 @pytest.mark.asyncio
@@ -473,7 +506,7 @@ async def test_7_12_notification_flow():
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 8.7 — Search
+# 8.7 - Search
 # ─────────────────────────────────────────────────────────────────────────────
 
 @pytest.mark.asyncio
@@ -532,3 +565,142 @@ async def test_8_07_search_products():
         await client.delete(f"/api/products/{prod_id}", headers=headers)
         await client.delete(f"/api/categories/{cat_id}", headers=headers)
     print("[8.7] ✓ Search test hoàn tất")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# F1 - Storage starter: upload + stream download (HTTP Range)
+# ─────────────────────────────────────────────────────────────────────────────
+
+# PNG 1x1 hợp lệ (header + IHDR + IDAT + IEND), đủ để stream/Range.
+_PNG_1x1 = bytes.fromhex(
+    "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4"
+    "890000000a49444154789c6300010000050001"
+    "0d0a2db40000000049454e44ae426082"
+)
+
+
+@pytest.mark.asyncio
+async def test_f1_file_upload_and_stream_download():
+    """Upload qua storage starter -> tải lại qua /media (200 + Range 206) -> xóa."""
+    async with app_client() as client:
+        headers = await _login(client)
+
+        # Upload multipart
+        resp = await client.post(
+            "/api/files",
+            files={"file": ("pixel.png", _PNG_1x1, "image/png")},
+            data={"description": f"F1 test {_S}"},
+            headers=headers,
+        )
+        assert resp.status_code == 201, f"Upload: {resp.text}"
+        file_id = resp.json()["id"]
+        file_path = resp.json()["file"]
+        print(f"\n[F1] Uploaded -> id={file_id}, key={file_path}")
+
+        # Tải lại đầy đủ qua /media (public, không cần header)
+        resp = await client.get(f"/media/{file_path}")
+        assert resp.status_code == 200, f"Download: {resp.status_code}"
+        assert resp.content == _PNG_1x1
+        assert resp.headers.get("accept-ranges") == "bytes"
+        print(f"[F1] ✓ Download 200, {len(resp.content)} bytes, content khớp")
+
+        # HTTP Range -> 206 Partial Content
+        resp = await client.get(f"/media/{file_path}", headers={"Range": "bytes=0-3"})
+        assert resp.status_code == 206, f"Range: {resp.status_code}"
+        assert resp.content == _PNG_1x1[:4]
+        assert "content-range" in {k.lower() for k in resp.headers}
+        print(f"[F1] ✓ Range bytes=0-3 -> 206, {len(resp.content)} bytes")
+
+        # Xóa file (id lấy thẳng từ response upload)
+        resp = await client.delete(f"/api/files/{file_id}", headers=headers)
+        assert resp.status_code == 200, f"Delete: {resp.text}"
+
+        # Sau khi xóa: object không còn -> 404
+        resp = await client.get(f"/media/{file_path}")
+        assert resp.status_code == 404
+        print(f"[F1] ✓ Sau khi xóa -> /media trả 404")
+    print("[F1] ✓ Storage upload/stream/delete hoàn tất")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# F2 - Cache catalog: đọc detail có cache, update -> invalidate
+# ─────────────────────────────────────────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_f2_product_cache_invalidation():
+    """GET detail (cache) -> update tên -> GET lại phải thấy tên mới (cache đã invalidate)."""
+    async with app_client() as client:
+        headers = await _login(client)
+
+        resp = await client.post("/api/categories", json={"name": f"Cat Cache F2 {_S}"}, headers=headers)
+        cat_id = resp.json()["id"]
+
+        old_name = f"Product Cache F2 {_S}"
+        resp = await client.post(
+            "/api/products",
+            json={
+                "name": old_name,
+                "categoryId": cat_id,
+                "locationAddress": "Kho HN",
+                "description": "SP test cache",
+                "price": 100000,
+                "stock": 5,
+            },
+            headers=headers,
+        )
+        assert resp.status_code == 201, f"Create: {resp.text}"
+        prod_id = resp.json()["id"]
+
+        # Đọc detail 2 lần (lần 2 phục vụ từ cache) - cùng kết quả
+        r1 = await client.get(f"/api/products/{prod_id}", headers=headers)
+        r2 = await client.get(f"/api/products/{prod_id}", headers=headers)
+        assert r1.status_code == 200 and r2.status_code == 200
+        assert r1.json()["name"] == old_name == r2.json()["name"]
+        print(f"\n[F2] ✓ Đọc detail 2 lần khớp (lần 2 từ cache)")
+
+        # Update tên -> phải invalidate cache
+        new_name = f"Product Cache F2 UPDATED {_S}"
+        resp = await client.put(
+            f"/api/products/{prod_id}", json={"name": new_name}, headers=headers
+        )
+        assert resp.status_code == 200, f"Update: {resp.text}"
+
+        # Đọc lại: nếu cache không invalidate sẽ vẫn trả tên cũ -> phải là tên mới
+        r3 = await client.get(f"/api/products/{prod_id}", headers=headers)
+        assert r3.json()["name"] == new_name, "Cache không được invalidate sau update!"
+        print(f"[F2] ✓ Sau update, detail trả tên mới (cache invalidated)")
+
+        # Cleanup
+        await client.delete(f"/api/products/{prod_id}", headers=headers)
+        await client.delete(f"/api/categories/{cat_id}", headers=headers)
+    print("[F2] ✓ Cache invalidation hoàn tất")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# F3 - Dashboard thống kê
+# ─────────────────────────────────────────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_f3_dashboard_stats():
+    """GET /api/dashboard/stats (cần quyền) trả đủ trường số liệu."""
+    async with app_client() as client:
+        headers = await _login(client)
+        resp = await client.get("/api/dashboard/stats", headers=headers)
+        assert resp.status_code == 200, f"Stats: {resp.text}"
+        data = resp.json()
+        for field in (
+            "revenuePaid", "totalOrders", "ordersToday", "unpaidOrders",
+            "totalProducts", "lowStockOptions", "totalUsers", "totalReviews",
+            "topProducts",
+        ):
+            assert field in data, f"Thiếu trường {field}"
+        assert isinstance(data["topProducts"], list)
+        assert data["totalUsers"] >= 1  # ít nhất có admin
+        print(f"\n[F3] ✓ Dashboard stats: orders={data['totalOrders']}, "
+              f"users={data['totalUsers']}, topProducts={len(data['topProducts'])}")
+
+    # Chưa đăng nhập -> 401
+    async with app_client() as client:
+        resp = await client.get("/api/dashboard/stats")
+        assert resp.status_code == 401
+        print("[F3] ✓ Chưa đăng nhập -> 401")

@@ -1,9 +1,9 @@
 """
-BaseRepository — CRUD chung cho mọi repository (thay Doctrine ServiceEntityRepository).
+BaseRepository - CRUD chung cho mọi repository (thay Doctrine ServiceEntityRepository).
 
 Pattern Xime: repository inject `AsyncSessionFactory`, lấy session hiện tại qua
 `self._sessions.current()`. Session chỉ tồn tại bên trong `async with transaction()`
-mở ở tầng service — kể cả thao tác đọc.
+mở ở tầng service - kể cả thao tác đọc.
 
     class UserRepository(BaseRepository[User]):
         model = User

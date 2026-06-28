@@ -1,5 +1,5 @@
 """
-CouponService — quản lý mã giảm giá.
+CouponService - quản lý mã giảm giá.
 Port từ CouponService.php.
 """
 from __future__ import annotations

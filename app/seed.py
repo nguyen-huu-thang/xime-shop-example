@@ -1,5 +1,5 @@
 """
-Seed dữ liệu khởi tạo — port từ SetupInitialCommand.php.
+Seed dữ liệu khởi tạo - port từ SetupInitialCommand.php.
 
 Tạo danh sách quyền (~55) + nhóm 'admin' được cấp toàn bộ quyền.
 Chạy:  python -m app.seed
@@ -7,7 +7,7 @@ Chạy:  python -m app.seed
 Idempotent: chạy lại không tạo trùng (kiểm tra tồn tại trước khi insert).
 Dùng DI của framework Xime (TransactionManager + AsyncSessionFactory).
 
-Tài khoản admin (có mật khẩu) seed ở Phase 9 — cần UserService (Phase 3).
+Tài khoản admin (có mật khẩu) seed ở Phase 9 - cần UserService (Phase 3).
 """
 from __future__ import annotations
 
@@ -28,7 +28,7 @@ from app.entity.user import User
 from app.service.list_table_service import _TABLE_DESCRIPTIONS
 from app.service.user_service import UserService
 
-# Danh sách quyền (name → mô tả) — nguồn: giải thích cơ sở dữ liệu.txt
+# Danh sách quyền (name → mô tả) - nguồn: giải thích cơ sở dữ liệu.txt
 PERMISSIONS: dict[str, str] = {
     # Quản lý người dùng
     "view_users": "Xem danh sách người dùng",
@@ -93,6 +93,9 @@ PERMISSIONS: dict[str, str] = {
     "view_notifications": "Xem danh sách thông báo",
     "create_notification": "Tạo thông báo mới",
     "delete_notification": "Xóa thông báo",
+    # Quản lý tệp (file_controller dùng các quyền này)
+    "view_files": "Xem danh sách tệp",
+    "delete_file": "Xóa tệp",
     # Quản lý toàn hệ thống
     "access_admin_dashboard": "Truy cập Dashboard quản trị",
     "manage_system_settings": "Quản lý cấu hình hệ thống",
@@ -132,7 +135,7 @@ async def seed() -> None:
                 )
             ).scalar_one_or_none()
             if admin is None:
-                admin = Group(name=ADMIN_GROUP_NAME, description="Quản trị viên — toàn quyền")
+                admin = Group(name=ADMIN_GROUP_NAME, description="Quản trị viên - toàn quyền")
                 session.add(admin)
                 await session.flush()
                 print(f"Tạo nhóm '{ADMIN_GROUP_NAME}'.")
@@ -179,7 +182,7 @@ async def seed() -> None:
             print(f"ListTable: +{lt_added} mới, tổng {len(_TABLE_DESCRIPTIONS)}.")
 
             # 5. Tài khoản admin đầu tiên (username=admin, password=Admin@123)
-            # Tài khoản này chỉ dùng để bắt đầu — đổi mật khẩu ngay sau khi seed
+            # Tài khoản này chỉ dùng để bắt đầu - đổi mật khẩu ngay sau khi seed
             # First admin account (change password immediately after seeding)
             admin_username = "admin"
             existing_admin = (

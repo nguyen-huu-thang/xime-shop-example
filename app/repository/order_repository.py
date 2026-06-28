@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from sqlalchemy import select
+from datetime import datetime
+
+from sqlalchemy import func, select
 
 from app.entity.order import Order
 from app.repository.base_repository import BaseRepository
@@ -21,3 +23,27 @@ class OrderRepository(BaseRepository[Order]):
             select(Order).order_by(Order.id.desc()).offset(offset).limit(limit)
         )
         return list(result.scalars().all())
+
+    # ── Dashboard aggregates ─────────────────────────────────────────
+
+    async def revenue_paid(self) -> float:
+        # Tổng doanh thu từ đơn đã thanh toán (payment_status=True).
+        # Total revenue from paid orders.
+        result = await self.session.execute(
+            select(func.coalesce(func.sum(Order.total_amount), 0)).where(
+                Order.payment_status.is_(True)
+            )
+        )
+        return float(result.scalar_one())
+
+    async def count_unpaid(self) -> int:
+        result = await self.session.execute(
+            select(func.count()).select_from(Order).where(Order.payment_status.is_(False))
+        )
+        return int(result.scalar_one())
+
+    async def count_created_since(self, since: datetime) -> int:
+        result = await self.session.execute(
+            select(func.count()).select_from(Order).where(Order.created_at >= since)
+        )
+        return int(result.scalar_one())

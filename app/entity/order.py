@@ -34,7 +34,7 @@ class Order(TimestampMixin, Base):
     ship_discount: Mapped[float] = mapped_column(
         Numeric(10, 2), default=0, server_default="0", nullable=False
     )
-    # coupon_id nullable — bổ sung theo QĐ-2 để liên kết coupon ↔ order
+    # coupon_id nullable - bổ sung theo QĐ-2 để liên kết coupon ↔ order
     coupon_id: Mapped[int | None] = mapped_column(
         BigInteger, ForeignKey("coupons.id"), nullable=True
     )

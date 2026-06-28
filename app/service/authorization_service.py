@@ -1,5 +1,5 @@
 """
-AuthorizationService — kiểm tra và enforce phân quyền.
+AuthorizationService - kiểm tra và enforce phân quyền.
 Port từ AuthorizationService.php.
 """
 from __future__ import annotations
@@ -46,7 +46,7 @@ class AuthorizationService:
             return True
 
         # 2. Ownership shortcut (caller passes True when resource belongs to user)
-        # 2. Shortcut ownership — caller truyền True khi tài nguyên thuộc về user
+        # 2. Shortcut ownership - caller truyền True khi tài nguyên thuộc về user
         if is_user_owned:
             return True
 
@@ -68,6 +68,20 @@ class AuthorizationService:
         if perm:
             return perm.default_value
         return False
+
+    async def get_effective_permissions(self, user: User) -> list[str]:
+        """Return permission names the user effectively has (for FE menu gating).
+        Trả về tên các quyền mà user thực sự có (để FE ẩn/hiện menu admin).
+
+        Lưu ý: duyệt qua toàn bộ quyền và gọi check_permission cho từng quyền. Phù hợp
+        cho lời gọi không thường xuyên (sau đăng nhập); nếu cần tối ưu có thể gộp truy vấn.
+        """
+        names = await self._perm_svc.get_permission_names()
+        granted: list[str] = []
+        for name in names:
+            if await self.check_permission(user, name):
+                granted.append(name)
+        return granted
 
     async def require(
         self,

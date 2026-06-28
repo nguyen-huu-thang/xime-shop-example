@@ -1,5 +1,5 @@
 """
-GroupPermissionService — quản lý quyền của nhóm.
+GroupPermissionService - quản lý quyền của nhóm.
 Port từ GroupPermissionService.php.
 """
 from __future__ import annotations
@@ -29,7 +29,7 @@ class GroupPermissionService:
 
     async def assign_permissions(self, group_id: int, permissions: dict) -> list[dict]:
         """Assign permissions to a group (bulk).
-        Gán quyền cho nhóm — bulk theo dict {perm_name: {is_active, is_denied, target}}.
+        Gán quyền cho nhóm - bulk theo dict {perm_name: {is_active, is_denied, target}}.
         """
         await self._group_svc.get_group_by_id(group_id)  # raises E10110 if missing
 
@@ -66,7 +66,7 @@ class GroupPermissionService:
 
     async def update_permission(self, group_id: int, permissions: dict) -> list[dict]:
         """Update existing group permissions (bulk).
-        Cập nhật quyền hiện có của nhóm — bulk.
+        Cập nhật quyền hiện có của nhóm - bulk.
         """
         await self._group_svc.get_group_by_id(group_id)
 

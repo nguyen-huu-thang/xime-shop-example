@@ -1,5 +1,5 @@
 """
-BlacklistTokenService — quản lý danh sách token bị thu hồi.
+BlacklistTokenService - quản lý danh sách token bị thu hồi.
 Port từ BlacklistTokenService.php.
 """
 from __future__ import annotations

@@ -1,5 +1,5 @@
 """
-ProductAttributeService — quản lý thuộc tính (loại lựa chọn: size, màu...) của sản phẩm.
+ProductAttributeService - quản lý thuộc tính (loại lựa chọn: size, màu...) của sản phẩm.
 Port từ ProductAttributeService.php.
 """
 from __future__ import annotations

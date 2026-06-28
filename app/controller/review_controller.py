@@ -30,6 +30,15 @@ class ReviewController:
         reviews = await self._svc.get_all_reviews()
         return [ReviewResponse.model_validate(r) for r in reviews]
 
+    @get("/product/{product_id}")
+    async def by_product(
+        self, product_id: int, page: int = 1, limit: int = 10
+    ) -> list[ReviewResponse]:
+        # Public: approved reviews of a product for the detail page (no login)
+        # Công khai: review đã duyệt của sản phẩm cho trang chi tiết (không cần đăng nhập)
+        reviews = await self._svc.get_approved_reviews_by_product(product_id, page, limit)
+        return [ReviewResponse.model_validate(r) for r in reviews]
+
     @get("/{id}")
     async def detail(self, id: int) -> ReviewResponse:
         review = await self._svc.get_review_by_id(id)

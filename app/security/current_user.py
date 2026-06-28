@@ -1,5 +1,5 @@
 """
-current_user — truy cập người dùng hiện tại của request (thay $request->attributes->get('user')).
+current_user - truy cập người dùng hiện tại của request (thay $request->attributes->get('user')).
 
 Dùng SecurityContext của framework Xime (xime.core.security):
   - `identity`  : lưu User entity đang đăng nhập

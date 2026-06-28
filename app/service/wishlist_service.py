@@ -44,6 +44,26 @@ class WishlistService:
                 products.append(product)
         return products
 
+    async def get_user_wishlist_detail(self, user_id: int) -> list[dict]:
+        # Return wishlist lines WITH their wishlist id so the client can delete them
+        # (DELETE /api/wishlist/{id} needs the wishlist item id, not the product id).
+        # Trả về các dòng wishlist KÈM id wishlist để client có thể xóa
+        # (DELETE /api/wishlist/{id} cần id của wishlist item, không phải product id).
+        async with self._transaction():
+            items = await self._repo.find_by_user_id(user_id)
+        result: list[dict] = []
+        for item in items:
+            product = await self._product_svc.get_product_by_id(item.product_id)
+            if product:
+                result.append(
+                    {
+                        "wishlistId": item.id,
+                        "productId": product.id,
+                        "name": product.name,
+                    }
+                )
+        return result
+
     async def create_wishlist_item(self, data: dict, user_id: int) -> Wishlist:
         product = await self._product_svc.get_product_by_id(data["productId"])
         if not product:

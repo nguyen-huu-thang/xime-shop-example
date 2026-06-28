@@ -1,5 +1,5 @@
 """
-CategoryService — quản lý danh mục cây cha-con.
+CategoryService - quản lý danh mục cây cha-con.
 Port từ CategoryService.php.
 """
 from __future__ import annotations

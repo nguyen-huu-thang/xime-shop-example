@@ -10,3 +10,4 @@ class UserResponse(BaseModel):
     email: str
     phone: str | None = None
     address: str | None = None
+    is_active: bool = True

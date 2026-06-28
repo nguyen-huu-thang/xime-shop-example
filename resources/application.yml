@@ -21,3 +21,31 @@ jwt:
   audience: "https://shop.scime.click"
   access_ttl: 3600      # access token: 1 giờ (giây)
   refresh_ttl: 5184000  # refresh token: 60 ngày (giây)
+
+# Cookie refresh token.
+# Refresh token đặt trong httpOnly cookie, Path=/api/refresh-token (xem app/security/cookies.py).
+# secure=true bắt buộc khi chạy production qua HTTPS. Dev http localhost để false.
+# samesite: "lax" hợp khi same-origin / proxy; "none" (kèm secure) nếu cross-site.
+cookie:
+  secure: false
+  samesite: "lax"
+
+# CORS - origin của frontend Next được phép gọi thẳng backend (trình duyệt -> backend).
+# KHÔNG dùng "*" khi allow_credentials=True; phải liệt kê origin cụ thể (dev + prod).
+# Frontend fetch phải đặt credentials: "include" để gửi cookie refresh + Authorization.
+cors:
+  allow_origins:
+    - "http://localhost:3000"      # dev (Next.js)
+    - "https://shop.scime.click"   # prod (đổi theo domain thật của frontend)
+  # DEV ONLY: khớp mọi origin http localhost / IP LAN (192.168.x.x, 10.x.x.x...) trên cổng bất kỳ,
+  # để mở web bằng IP LAN (vd http://192.168.0.103:3000) vẫn qua được CORS mà không phải thêm tay.
+  # Production (application-production.yml) đặt null để TẮT regex này.
+  allow_origin_regex: '^http://(localhost|(\d{1,3}\.){3}\d{1,3})(:\d+)?$'
+
+# Storage — lưu file qua StorageService của framework (starter localfs).
+# root: thư mục gốc chứa object trên đĩa. Giữ "public/data" để tương thích file cũ.
+# Đổi sang backend s3 (MinIO) bằng cách bind S3FileStorage trong config/dependency.py
+# và thêm khối storage.s3.* tương ứng.
+storage:
+  local:
+    root: "public/data"

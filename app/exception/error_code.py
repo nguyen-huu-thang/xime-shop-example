@@ -1,5 +1,5 @@
 """
-Bảng error code — port nguyên văn từ src/Exception/ErrorCode.php của dự án PHP.
+Bảng error code - port nguyên văn từ src/Exception/ErrorCode.php của dự án PHP.
 
 Mỗi mã có: code (int), message (vi), http_status (int).
 Dùng qua AppException("Exxxx"). Xem [.claude/docs/error-code-system.md].
@@ -20,7 +20,7 @@ class ErrorDef:
 ERROR_CODES: dict[str, ErrorDef] = {
     "S0000": ErrorDef(-1, "Bạn đã đăng nhập", 303),
 
-    # 1.1 Lỗi chung (0000–0999)
+    # 1.1 Lỗi chung (0000-0999)
     "E0000": ErrorDef(0, "Lỗi không xác định", 500),
     "E0001": ErrorDef(1, "Dịch vụ tạm thời không hoạt động", 503),
     "E0002": ErrorDef(2, "Yêu cầu không hợp lệ", 400),
@@ -38,7 +38,7 @@ ERROR_CODES: dict[str, ErrorDef] = {
     "E0032": ErrorDef(32, "Hành động không được phép", 403),
     "E0099": ErrorDef(99, "Lỗi hệ thống không xác định", 500),
 
-    # 1.2 User Service (1000–1999)
+    # 1.2 User Service (1000-1999)
     "E1000": ErrorDef(1000, "Tài khoản đã tồn tại", 409),
     "E1001": ErrorDef(1001, "Email đã tồn tại", 409),
     "E1002": ErrorDef(1002, "Số điện thoại đã tồn tại", 409),
@@ -65,7 +65,7 @@ ERROR_CODES: dict[str, ErrorDef] = {
     "E1041": ErrorDef(1041, "Đã đạt giới hạn tạo tài khoản", 429),
     "E1999": ErrorDef(1999, "Lỗi không xác định", 500),
 
-    # 1.3 Authentication/Authorization Service (2000–2999)
+    # 1.3 Authentication/Authorization Service (2000-2999)
     "E2000": ErrorDef(2000, "Tên đăng nhập hoặc mật khẩu không đúng", 401),
     "E2001": ErrorDef(2001, "Tài khoản đã bị vô hiệu hóa", 403),
     "E2002": ErrorDef(2002, "Bạn chưa đăng nhập", 403),
@@ -92,7 +92,7 @@ ERROR_CODES: dict[str, ErrorDef] = {
     "E2051": ErrorDef(2051, "Refresh token đã hết hạn", 401),
     "E2999": ErrorDef(2999, "Lỗi không xác định trong dịch vụ xác thực/phân quyền", 500),
 
-    # 1.4 Payment Service (3000–3999)
+    # 1.4 Payment Service (3000-3999)
     "E3000": ErrorDef(3000, "Giao dịch không thành công", 400),
     "E3001": ErrorDef(3001, "Số dư không đủ để thực hiện giao dịch", 402),
     "E3002": ErrorDef(3002, "Phương thức thanh toán không được hỗ trợ", 400),
@@ -116,7 +116,7 @@ ERROR_CODES: dict[str, ErrorDef] = {
     "E3042": ErrorDef(3042, "Số lần giao dịch vượt quá giới hạn", 429),
     "E3999": ErrorDef(3999, "Lỗi không xác định trong dịch vụ thanh toán", 500),
 
-    # 1.5 Notification Service (4000–4999)
+    # 1.5 Notification Service (4000-4999)
     "E4000": ErrorDef(4000, "Gửi thông báo không thành công", 500),
     "E4001": ErrorDef(4001, "Thông tin người nhận không hợp lệ", 400),
     "E4002": ErrorDef(4002, "Nội dung thông báo bị thiếu", 400),
@@ -139,7 +139,7 @@ ERROR_CODES: dict[str, ErrorDef] = {
     "E4041": ErrorDef(4041, "Yêu cầu gửi thông báo bị từ chối do giới hạn", 429),
     "E4999": ErrorDef(4999, "Lỗi không xác định trong dịch vụ thông báo", 500),
 
-    # 1.6 Data Service (5000–5999)
+    # 1.6 Data Service (5000-5999)
     "E5000": ErrorDef(5000, "Lỗi xử lý dữ liệu", 500),
     "E5001": ErrorDef(5001, "Dữ liệu đầu vào không hợp lệ", 400),
     "E5002": ErrorDef(5002, "Không thể tải dữ liệu", 500),
@@ -159,7 +159,7 @@ ERROR_CODES: dict[str, ErrorDef] = {
     "E5041": ErrorDef(5041, "Tệp bị bảo vệ hoặc quyền bị hạn chế", 403),
     "E5999": ErrorDef(5999, "Lỗi không xác định trong dịch vụ dữ liệu", 500),
 
-    # 2.1 Web bán hàng (10000–19999)
+    # 2.1 Web bán hàng (10000-19999)
     "E10000": ErrorDef(10000, "Lỗi không xác định trong hệ thống web bán hàng", 500),
     "E10001": ErrorDef(10001, "Yêu cầu không hợp lệ", 400),
     "E10002": ErrorDef(10002, "Tham số yêu cầu bị thiếu", 400),
@@ -179,7 +179,7 @@ ERROR_CODES: dict[str, ErrorDef] = {
     "E10301": ErrorDef(10301, "Không thể thêm sản phẩm vào giỏ hàng", 500),
     "E10302": ErrorDef(10302, "Không tìm thấy danh sách yêu thích", 404),
     "E10303": ErrorDef(10303, "Không thể thêm sản phẩm vào danh sách yêu thích", 500),
-    # Danh mục (E10310–E10319) — không có trong PHP gốc, thêm cho kiến trúc đa lớp
+    # Danh mục (E10310-E10319) - không có trong PHP gốc, thêm cho kiến trúc đa lớp
     "E10310": ErrorDef(10310, "Không tìm thấy danh mục", 404),
     "E10311": ErrorDef(10311, "Tên danh mục là bắt buộc", 400),
     "E10400": ErrorDef(10400, "Phiếu giảm giá không tồn tại", 404),
@@ -204,15 +204,15 @@ ERROR_CODES: dict[str, ErrorDef] = {
     "E10711": ErrorDef(10711, "Dữ liệu đầu vào không đúng định dạng", 400),
     "E19999": ErrorDef(19999, "Lỗi không xác định trong ứng dụng", 500),
 
-    # 2.2 Web lưu trữ dữ liệu (20000–29999)
+    # 2.2 Web lưu trữ dữ liệu (20000-29999)
     "E20000": ErrorDef(20000, "File vượt quá kích thước cho phép", 413),
     "E20200": ErrorDef(20200, "File không tồn tại", 404),
 
-    # 2.3 Mạng xã hội (30000–39999)
+    # 2.3 Mạng xã hội (30000-39999)
     "E30000": ErrorDef(30000, "Người dùng bị cấm", 403),
     "E30200": ErrorDef(30200, "Bài viết không tồn tại", 404),
 
-    # 2.4 Ứng dụng khác (40000–49999)
+    # 2.4 Ứng dụng khác (40000-49999)
     "E40000": ErrorDef(40000, "Lỗi không xác định trong ứng dụng", 500),
 }
 

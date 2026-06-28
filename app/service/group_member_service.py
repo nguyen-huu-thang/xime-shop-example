@@ -1,5 +1,5 @@
 """
-GroupMemberService — quản lý thành viên nhóm.
+GroupMemberService - quản lý thành viên nhóm.
 Port từ GroupMemberService.php.
 """
 from __future__ import annotations

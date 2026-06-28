@@ -6,8 +6,8 @@ class SearchService:
         self._product_svc = product_service
 
     async def search_all(self, keywords: str) -> list:
-        # PHP returns [] — not implemented upstream
-        # PHP trả về [] — không có logic thực
+        # PHP returns [] - not implemented upstream
+        # PHP trả về [] - không có logic thực
         return []
 
     async def search_user(self, keywords: str) -> list:

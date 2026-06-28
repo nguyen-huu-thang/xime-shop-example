@@ -1,11 +1,12 @@
 import logging
-import os
 import secrets
-import shutil
 from datetime import datetime, timezone
-from pathlib import Path
 
+from fastapi import UploadFile
+
+from xime.adapters.web.files import PayloadTooLarge, save_upload
 from xime.core.transaction.manager import TransactionManager
+from xime.starters.storage import StorageError, StorageService
 
 from app.entity.file import File
 from app.exception.app_exception import AppException
@@ -15,27 +16,29 @@ from app.service.user_service import UserService
 
 logger = logging.getLogger(__name__)
 
-# Upload directory from environment variable, fallback to public/data
-# Thư mục upload lấy từ biến môi trường, mặc định là public/data
-_UPLOAD_DIR = os.environ.get("UPLOAD_DIR", "public/data")
+# Giới hạn dung lượng mỗi file upload (10 MB).
+# Per-file upload size cap (10 MB).
+_MAX_UPLOAD_BYTES = 10 * 1024 * 1024
 
 
 class FileService:
     def __init__(
         self,
         transaction: TransactionManager,
+        storage: StorageService,
         file_repository: FileRepository,
         user_service: UserService,
         list_table_service: ListTableService,
     ) -> None:
         self._transaction = transaction
+        self._storage = storage
         self._repo = file_repository
         self._user_svc = user_service
         self._list_table_svc = list_table_service
 
     def _generate_random_name(self, length: int = 32) -> str:
-        # 32 hex chars from 16 random bytes — mirrors PHP bin2hex(random_bytes(16))
-        # 32 ký tự hex từ 16 byte ngẫu nhiên — giống PHP bin2hex(random_bytes(16))
+        # 32 hex chars from 16 random bytes - mirrors PHP bin2hex(random_bytes(16))
+        # 32 ký tự hex từ 16 byte ngẫu nhiên - giống PHP bin2hex(random_bytes(16))
         return secrets.token_hex(length // 2)
 
     def _build_file_path(self, random_name: str, extension: str) -> tuple[str, str, str]:
@@ -50,6 +53,12 @@ class FileService:
     async def get_all_files(self) -> list[File]:
         async with self._transaction():
             return await self._repo.find_all()
+
+    async def count_files(self) -> int:
+        # Total files (for FE pagination).
+        # Tổng số tệp (phục vụ phân trang FE).
+        async with self._transaction():
+            return await self._repo.count()
 
     async def get_files_paginated(self, page: int, limit: int) -> list[File]:
         async with self._transaction():
@@ -79,10 +88,9 @@ class FileService:
 
     async def upload_file(
         self,
-        file_content: bytes,
+        upload_file: UploadFile,
         original_name: str,
         extension: str,
-        file_size: int,
         user_id: int,
         data: dict,
     ) -> File:
@@ -112,13 +120,27 @@ class FileService:
         random_name = self._generate_random_name()
         _, _, relative_path = self._build_file_path(random_name, extension)
 
-        full_path = Path(_UPLOAD_DIR) / relative_path
+        # Stream thẳng vào storage theo chunk (không nạp hết vào RAM), giới hạn dung lượng.
+        # Stream straight into storage chunk by chunk with a size cap (never buffer in RAM).
         try:
-            full_path.parent.mkdir(parents=True, exist_ok=True)
-            full_path.write_bytes(file_content)
-        except Exception as exc:
+            file_size = await save_upload(
+                self._storage,
+                relative_path,
+                upload_file,
+                max_bytes=_MAX_UPLOAD_BYTES,
+                content_type=upload_file.content_type,
+            )
+        except PayloadTooLarge as exc:
+            raise AppException("E5012") from exc  # vượt dung lượng cho phép (413)
+        except StorageError as exc:
             logger.error("File upload error: %s", exc)
-            raise AppException("E5010") from exc
+            raise AppException("E5010") from exc  # không thể tải tệp lên
+
+        if file_size == 0:
+            # Tệp rỗng: dọn object vừa tạo rồi báo lỗi.
+            # Empty file: clean up the just-created object then fail.
+            await self._storage.delete(relative_path)
+            raise AppException("E5013")  # thiếu dữ liệu/tệp để tải lên
 
         # Build entity and persist
         # Tạo entity và lưu vào DB
@@ -185,14 +207,11 @@ class FileService:
             db_file = await self._repo.find(file_id)
             if not db_file:
                 raise AppException("E10200")
-
-            # Remove physical file if it exists
-            # Xóa file vật lý nếu tồn tại
-            full_path = Path(_UPLOAD_DIR) / db_file.file_path
-            if full_path.exists():
-                try:
-                    full_path.unlink()
-                except Exception as exc:
-                    logger.warning("Could not delete file %s: %s", full_path, exc)
-
+            # Giữ key trước khi đóng session (tránh expire_on_commit lazy-load).
+            # Capture the storage key before the session closes.
+            storage_key = db_file.file_path
             await self._repo.delete(db_file)
+
+        # Xóa object vật lý sau khi commit DB (idempotent, no-op nếu đã mất).
+        # Delete the physical object after the DB commit (idempotent, no-op if gone).
+        await self._storage.delete(storage_key)

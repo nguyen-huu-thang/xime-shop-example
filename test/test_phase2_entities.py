@@ -1,5 +1,5 @@
 """
-Phase 2 — Test entity, schema & seed.
+Phase 2 - Test entity, schema & seed.
 
 - Metadata có đủ 25 bảng.
 - Insert + query một entity (Category) qua transaction, gồm quan hệ cha-con.
