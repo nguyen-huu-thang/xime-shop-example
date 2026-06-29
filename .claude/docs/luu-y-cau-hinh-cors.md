@@ -16,38 +16,27 @@ CORS), và **không lưu được cookie refresh** → mất phiên ngay khi rel
 
 ## Cần thay đổi (2 phần)
 
-### 1. Bật CORSMiddleware (FastAPI)
+### 1. Bật CORS qua `configure_cors()` (API framework Xime)
 
-Thêm vào [`app/shop_web_adapter.py`](../../app/shop_web_adapter.py), trong `build_app`, **sau** khi đã
-add `JwtMiddleware` để CORS là **lớp ngoài cùng** (xử lý preflight `OPTIONS` trước khi JWT middleware
-chạy - middleware FastAPI theo LIFO: add sau = ngoài cùng = chạy trước).
+Khai báo trong [`app/config/web.py`](../../app/config/web.py) bằng helper `configure_cors()` -
+**đăng ký TRƯỚC** `configure_middleware(JwtMiddleware, ...)` để CORS là **lớp ngoài hơn** (xử lý
+preflight `OPTIONS` trước khi JWT middleware chạy: middleware khai báo trước = ngoài hơn = chạy trước).
 
 ```python
-from starlette.middleware.cors import CORSMiddleware
+from xime.adapters.web import configure_cors, configure_middleware
 
-class ShopWebAdapter(WebAdapter):
-    def build_app(self, xime_app) -> FastAPI:
-        fastapi_app = super().build_app(xime_app)
-        register_exception_handlers(fastapi_app)
-
-        # ... add JwtMiddleware như hiện tại ...
-
-        # CORS: add SAU JwtMiddleware để là lớp ngoài cùng (xử lý preflight trước).
-        # CORS must be the outermost layer so OPTIONS preflight is handled before JWT.
-        config = xime_app.get(RuntimeConfig)  # hoặc cách lấy config đang dùng
-        origins = config.get("cors.allow_origins", ["http://localhost:3000"])
-        fastapi_app.add_middleware(
-            CORSMiddleware,
-            allow_origins=origins,          # PHẢI là danh sách origin CỤ THỂ
-            allow_credentials=True,         # cho phép gửi cookie + Authorization
-            allow_methods=["*"],
-            allow_headers=["*"],
-        )
-        return fastapi_app
+# CORS đứng trước JwtMiddleware. allow_origins / allow_origin_regex để None -> đọc từ
+# khối cors.* trong application.yml (Operator chỉnh qua YAML, không đụng code).
+configure_cors(
+    allow_credentials=True,   # cho phép gửi cookie + Authorization
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+configure_middleware(JwtMiddleware, ...)
 ```
 
 > ⚠️ **Khi `allow_credentials=True` thì `allow_origins` KHÔNG được là `"*"`.** Trình duyệt từ chối
-> wildcard với request credentialed. Phải liệt kê origin cụ thể của frontend (dev + prod).
+> wildcard với request credentialed. Phải liệt kê origin cụ thể của frontend (dev + prod) trong YAML.
 
 ### 2. Cookie refresh phải gửi được cross-site
 

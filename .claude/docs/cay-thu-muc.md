@@ -30,14 +30,14 @@ shop/                              ← project root
 │   │
 │   ├── repository/                ← Tầng Repository (data access) — scanned
 │   │   ├── __init__.py
-│   │   ├── base_repository.py     ← CRUD chung (thay ServiceEntityRepository)
+│   │   │                            CRUD chung: kế thừa CrudRepository[T] của xime.starters.sqlalchemy
+│   │   │                            (đã bỏ base_repository.py tự viết - Xime 0.6.1)
 │   │   ├── user_repository.py
 │   │   ├── category_repository.py
 │   │   ├── ...
 │   │
 │   ├── entity/                    ← SQLAlchemy ORM models — EXCLUDED khỏi DI
-│   │   ├── __init__.py            ← export Base + tất cả entity (cho migration)
-│   │   ├── base.py                ← DeclarativeBase, mixin timestamps
+│   │   ├── __init__.py            ← export Base + tất cả entity (cho migration); Base/TimestampMixin import thẳng từ xime.starters.sqlalchemy
 │   │   ├── user.py
 │   │   ├── category.py
 │   │   ├── product.py
@@ -93,4 +93,4 @@ shop/                              ← project root
   ```
 - **`entity/`, `dto/`, `exception/`** nằm trong danh sách exclude mặc định của Xime → không bị scan vào DI. `entity` và `exception` trùng tên package exclude sẵn; `dto` cũng vậy. An toàn.
 - **`controller/`** phải khai báo cả 2 nơi: `dependency.scan("controller")` (để DI tạo instance) **và** `configure_controllers("controller")` (để đăng ký route). Xem `routing-layer.md` của framework.
-- **`base_repository.py`** là tương đương `Doctrine\ServiceEntityRepository` — cung cấp `find`, `find_all`, `save`, `delete`... cho mọi repository kế thừa. Xem [`../rules/repository-pattern.md`](../rules/repository-pattern.md).
+- **`CrudRepository[T]`** (từ `xime.starters.sqlalchemy`, Xime 0.6.1) là tương đương `Doctrine\ServiceEntityRepository` — cung cấp `find`, `find_or_fail`, `find_all`, `exists`, `count`, `save`, `save_all`, `delete` cho mọi repository kế thừa. Lớp nền là abstract nên DI scanner bỏ qua (không singleton thừa). Đã bỏ `base_repository.py` tự viết. Xem [`../rules/repository-pattern.md`](../rules/repository-pattern.md).

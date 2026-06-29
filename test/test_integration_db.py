@@ -15,7 +15,7 @@ from httpx import ASGITransport, AsyncClient
 
 import app.config.web  # noqa: F401 - side effect: configure_controllers + openapi
 from app.config.dependency import dependency
-from app.shop_web_adapter import ShopWebAdapter
+from xime.adapters.web import WebAdapter
 from xime.testing import TestApplication
 
 # Unique suffix per run to avoid name collision from previous failed runs
@@ -30,7 +30,7 @@ _S = uuid.uuid4().hex[:6]
 async def app_client():
     """Trả về AsyncClient đã qua lifespan (routes đã đăng ký)."""
     async with TestApplication(binding=dependency) as test_app:
-        fastapi_app = ShopWebAdapter().build_app(test_app)
+        fastapi_app = WebAdapter().build_app(test_app)
         async with fastapi_app.router.lifespan_context(fastapi_app):
             transport = ASGITransport(app=fastapi_app)
             async with AsyncClient(transport=transport, base_url="http://test") as client:
@@ -457,7 +457,9 @@ async def test_7_12_wishlist_flow():
         resp = await client.get("/api/wishlist", headers=headers)
         assert resp.status_code == 200
         items = resp.json()
-        assert any(p.get("id") == prod_id for p in items)
+        # GET /api/wishlist trả về dict {wishlistId, productId, name} - khớp theo productId.
+        # The endpoint returns {wishlistId, productId, name} dicts - match on productId.
+        assert any(p.get("productId") == prod_id for p in items)
         print(f"[7.12] ✓ User wishlist: {len(items)} product(s)")
 
         # Xóa

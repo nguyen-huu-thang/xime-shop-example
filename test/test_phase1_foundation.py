@@ -3,7 +3,7 @@ Phase 1 - Test nền tảng.
 
 Bao gồm:
 - DB stack: DI build + transaction + AsyncSession (SELECT 1).
-- AppException → JSON qua ShopWebAdapter exception handler.
+- AppException → JSON qua exception handler (configure_exception_handlers).
 - Lỗi validation → JSON E10711.
 - Unit: AppException, error_code fallback, current_user/require_login + SecurityContext.
 """
@@ -18,7 +18,7 @@ from app.config.dependency import dependency
 from app.exception.app_exception import AppException
 from app.exception.error_code import get_error
 from app.security.current_user import current_user, require_login, set_current_user
-from app.shop_web_adapter import ShopWebAdapter
+from xime.adapters.web import WebAdapter
 from xime.core.security import clear_security
 from xime.starters.sqlalchemy import SqlAlchemyTransactionManager
 from xime.starters.sqlalchemy.session import AsyncSessionFactory
@@ -46,8 +46,8 @@ async def test_session_outside_transaction_raises():
 
 # ── Exception handler qua HTTP ───────────────────────────────────────────────
 def _build_app_with_probe(test_app) -> FastAPI:
-    """Build FastAPI qua ShopWebAdapter + thêm route thử raise lỗi."""
-    fastapi_app = ShopWebAdapter().build_app(test_app)
+    """Build FastAPI qua WebAdapter + thêm route thử raise lỗi."""
+    fastapi_app = WebAdapter().build_app(test_app)
 
     @fastapi_app.get("/_probe/app-exception")
     async def _raise_app_exc():

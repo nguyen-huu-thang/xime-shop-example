@@ -71,10 +71,9 @@ class CartController:
         item = await self._svc.get_cart_item_by_id(id)
         if not item:
             raise AppException("E10601")
-        is_owned = item.user_id == user.id
-        has_perm = await self._authz.check_permission(user, "view_carts", target_id=id)
-        if not has_perm and not is_owned:
-            raise AppException("E2021")
+        # Chủ sở hữu hoặc người có quyền view_carts mới được xem
+        # Owner or holder of view_carts may view
+        await self._authz.require_owner_or_permission(user, "view_carts", item, target_id=id)
         return await self._item_to_dict(item)
 
     @post("", status_code=201)

@@ -29,7 +29,8 @@ Repository → Service → DTO → Controller cho cụm auth.
 ### Hoàn thiện middleware
 - [x] **3.8** `security/jwt_middleware.py` — JwtMiddleware (BaseHTTPMiddleware) mới hoàn toàn:
   verify → check blacklist → type=access → load user → is_active → set context. Lỗi → E1023.
-  Đăng ký qua `ShopWebAdapter.build_app()` (inject services từ DI container).
+  Đăng ký qua `configure_middleware(JwtMiddleware, ...Inject(...))` trong `app/config/web.py`
+  (trước đây qua `ShopWebAdapter.build_app()`; xem [`go-web-adapter-dung-configure.md`](../go-web-adapter-dung-configure.md)).
 
 ### DTO
 - [x] **3.9** `dto/request/auth_request.py`: `LoginRequest`, `RefreshTokenRequest`, `ChangePasswordRequest`,

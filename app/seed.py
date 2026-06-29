@@ -102,6 +102,21 @@ PERMISSIONS: dict[str, str] = {
     "view_system_logs": "Quản lý nhật ký hệ thống",
 }
 
+# Quyền scope theo nhánh category (target_id = category, áp cho cả subtree).
+# Dùng cho mô hình "mỗi nhân viên phụ trách một mảng hàng".
+# Category-subtree scoped permissions (target_id is a category, applies to the whole subtree).
+CATEGORY_SCOPED: set[str] = {
+    "view_products",
+    "view_product_details",
+    "create_product",
+    "edit_product",
+    "delete_product",
+    "manage_featured_products",
+    "manage_product_stock",
+    "edit_category",
+    "delete_category",
+}
+
 ADMIN_GROUP_NAME = "admin"
 
 
@@ -116,17 +131,30 @@ async def seed() -> None:
             session = sessions.current()
 
             # 1. Seed permissions (idempotent)
-            existing = {
-                p.name
+            existing_perms = {
+                p.name: p
                 for p in (await session.execute(select(Permission))).scalars().all()
             }
             created = 0
+            updated_scope = 0
             for name, desc in PERMISSIONS.items():
-                if name not in existing:
-                    session.add(Permission(name=name, description=desc, default_value=False))
+                want_scope = "category" if name in CATEGORY_SCOPED else None
+                perm = existing_perms.get(name)
+                if perm is None:
+                    session.add(Permission(
+                        name=name, description=desc, default_value=False, scope_type=want_scope
+                    ))
                     created += 1
+                elif perm.scope_type != want_scope:
+                    # Idempotent: đồng bộ scope_type cho quyền đã seed trước đây
+                    # Idempotent: sync scope_type for previously seeded permissions
+                    perm.scope_type = want_scope
+                    updated_scope += 1
             await session.flush()
-            print(f"Permissions: +{created} mới, tổng {len(PERMISSIONS)}.")
+            print(
+                f"Permissions: +{created} mới, cập nhật scope {updated_scope}, "
+                f"tổng {len(PERMISSIONS)}."
+            )
 
             # 2. Nhóm admin
             admin = (
@@ -197,6 +225,7 @@ async def seed() -> None:
                     email="admin@shop.local",
                     password=hashed,
                     is_active=True,
+                    is_superadmin=True,
                 )
                 session.add(admin_user)
                 await session.flush()
@@ -208,7 +237,13 @@ async def seed() -> None:
                 print(f"Tạo tài khoản admin (username='{admin_username}', password='Admin@123').")
                 print("⚠️  Đổi mật khẩu admin ngay sau khi khởi động!")
             else:
-                print(f"Tài khoản '{admin_username}' đã tồn tại.")
+                # Idempotent: đảm bảo admin đã seed trước đây cũng là superadmin
+                # Idempotent: ensure a previously seeded admin is also superadmin
+                if not existing_admin.is_superadmin:
+                    existing_admin.is_superadmin = True
+                    print(f"Cập nhật '{admin_username}' thành superadmin.")
+                else:
+                    print(f"Tài khoản '{admin_username}' đã tồn tại.")
 
         print("Seed hoàn tất.")
     finally:

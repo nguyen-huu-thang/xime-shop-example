@@ -3,10 +3,10 @@ from __future__ import annotations
 from sqlalchemy import select
 
 from app.entity.permission import Permission
-from app.repository.base_repository import BaseRepository
+from xime.starters.sqlalchemy import CrudRepository
 
 
-class PermissionRepository(BaseRepository[Permission]):
+class PermissionRepository(CrudRepository[Permission]):
     model = Permission
 
     async def find_by_name(self, name: str) -> Permission | None:

@@ -36,7 +36,7 @@ class CouponController:
         await self._authz.require(user, "view_coupons")
         coupon = await self._svc.get_coupon_by_id(id)
         if not coupon:
-            raise AppException("E10701")
+            raise AppException("E10400")
         return CouponResponse.model_validate(coupon)
 
     @post("", status_code=201)

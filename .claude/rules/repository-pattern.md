@@ -1,10 +1,11 @@
 # Repository Pattern (SQLAlchemy async)
 
 > Thay thế `Doctrine\ServiceEntityRepository`. PHP repository tự có sẵn `find`, `findAll`, `findBy`...
-> Python tự viết `BaseRepository` cung cấp CRUD chung.
+> Python kế thừa **`CrudRepository[T]` của framework** (`xime.starters.sqlalchemy`) để có sẵn CRUD chung.
 >
-> ✅ **Đã triển khai ở Phase 1** — file thật: `app/repository/base_repository.py`. Mục dưới phản ánh
-> đúng code thực tế (đã chạy + test).
+> ✅ **Cập nhật (Xime 0.6.1):** trước đây dùng `app/repository/base_repository.py` tự viết; nay đã
+> đổi sang `CrudRepository[T]` do framework cung cấp và **xóa file base tự viết**. `CrudRepository` là
+> abstract (`model` là abstract property) nên DI scanner bỏ qua lớp nền -> hết singleton thừa.
 
 ## Cơ chế session của starter Xime (quan trọng)
 
@@ -15,57 +16,26 @@ Starter `xime.starters.sqlalchemy` KHÔNG inject `AsyncSession` trực tiếp. T
   transaction sẽ **raise RuntimeError**. → Mọi thao tác repo (kể cả đọc) phải nằm trong transaction.
 - `SqlAlchemyTransactionManager` lo `begin/commit/rollback`. Repo chỉ `add`/`flush`/`delete`.
 
-## BaseRepository (code thật)
+## CrudRepository của framework (Xime 0.6.1)
 
-```python
-# app/repository/base_repository.py
-from typing import Generic, TypeVar
-from sqlalchemy import func, select
-from sqlalchemy.ext.asyncio import AsyncSession
-from xime.starters.sqlalchemy import Base
-from xime.starters.sqlalchemy.session import AsyncSessionFactory
+Base CRUD do `xime.starters.sqlalchemy` cung cấp - app không tự viết nữa. Method có sẵn:
+`find` · `find_or_fail` · `find_all` · `exists` · `count` · `save` · `save_all` · `delete`, cùng
+exception `EntityNotFoundError` (cho `find_or_fail`).
 
-T = TypeVar("T", bound=Base)
-
-class BaseRepository(Generic[T]):
-    model: type[T]   # subclass gán, vd: model = Category
-
-    def __init__(self, sessions: AsyncSessionFactory) -> None:
-        self._sessions = sessions
-
-    @property
-    def session(self) -> AsyncSession:
-        return self._sessions.current()   # raise nếu ngoài transaction
-
-    async def find(self, id_) -> T | None:
-        return await self.session.get(self.model, id_)
-
-    async def find_all(self) -> list[T]:
-        result = await self.session.execute(select(self.model))
-        return list(result.scalars().all())
-
-    async def save(self, entity: T) -> T:
-        self.session.add(entity)
-        await self.session.flush()   # flush để lấy id; commit do transaction lo
-        return entity
-
-    async def delete(self, entity: T) -> None:
-        await self.session.delete(entity)
-        await self.session.flush()
-```
-
-> **Ghi chú:** `BaseRepository` nằm trong package `app.repository` được scan → DI tạo 1 singleton
-> `BaseRepository` thừa (vô hại, không ai inject nó). Repo cụ thể được inject theo class cụ thể.
+Cơ chế: `model` là abstract property nên chính `CrudRepository` là abstract -> DI scanner bỏ qua
+lớp nền. Subclass set `model = Entity` (class attribute) tự thành concrete và được đăng ký - không
+còn singleton base thừa như bản tự viết trước đây. `session` đọc qua `AsyncSessionFactory.current()`
+nên mọi method phải gọi trong `async with transaction()` (mở ở service).
 
 ## Repository cụ thể
 
 ```python
 # app/repository/category_repository.py
 from sqlalchemy import select
-from app.repository.base_repository import BaseRepository
+from xime.starters.sqlalchemy import CrudRepository
 from app.entity.category import Category
 
-class CategoryRepository(BaseRepository[Category]):
+class CategoryRepository(CrudRepository[Category]):
     model = Category
 
     async def find_by_parent_id(self, parent_id: int) -> list[Category]:

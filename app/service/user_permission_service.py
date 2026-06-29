@@ -51,13 +51,20 @@ class UserPermissionService:
         assigned: list[dict] = []
         async with self._transaction():
             for perm_id, perm_name, perm_data, target_id in entries:
-                up = UserPermission(
-                    user_id=user_id,
-                    permission_id=perm_id,
-                    is_active=perm_data.get("is_active", True),
-                    is_denied=perm_data.get("is_denied", False),
-                    target_id=target_id,
+                # Idempotent: reuse the existing (user, permission, target) entry instead
+                # of inserting a duplicate row on repeated assign calls.
+                # Idempotent: tái dùng entry (user, permission, target) đã có thay vì chèn
+                # bản ghi trùng khi gọi assign nhiều lần.
+                up = await self._repo.find_by_user_permission_target(
+                    user_id, perm_id, target_id
                 )
+                if up is None:
+                    up = UserPermission(
+                        user_id=user_id, permission_id=perm_id, target_id=target_id
+                    )
+                up.is_active = perm_data.get("is_active", True)
+                up.is_denied = perm_data.get("is_denied", False)
+                up.target_id = target_id
                 await self._repo.save(up)
                 assigned.append({"permission": perm_name, "status": "assigned"})
 
@@ -118,23 +125,32 @@ class UserPermissionService:
         return updated
 
     async def has_permission(
-        self, user_id: int, permission_name: str, target_id: int | None = None
+        self, user_id: int, permission_name: str, scope_ids: set[int]
     ) -> int:
         """Return -1 (denied), 0 (none), or 1 (granted).
         Trả về -1 (từ chối), 0 (không có), hoặc 1 (được cấp).
+
+        scope_ids: tập target_id được coi là khớp. Quyền khớp-đúng-đối-tượng -> {target_id};
+        quyền scope theo category -> chuỗi tổ tiên của category; truy vấn global -> tập rỗng.
+
+        Deny-overrides: quét HẾT bản ghi áp dụng được; có deny đang active là -1, không thì xét
+        allow; không thoát sớm theo bản ghi đầu tiên (tránh allow che deny tùy thứ tự DB).
         """
         async with self._transaction():
             ups = await self._repo.find_user_permission(user_id, permission_name)
 
+        saw_allow = False
         for up in ups:
             if not up.is_active:
                 continue
-            if up.target_id is None:
-                return -1 if up.is_denied else 1
-            if up.target_id == target_id:
-                return -1 if up.is_denied else 1
+            # Record applies if it is global (target None) or its target is in scope
+            # Bản ghi áp dụng nếu là global (target None) hoặc target nằm trong scope
+            if up.target_id is None or up.target_id in scope_ids:
+                if up.is_denied:
+                    return -1
+                saw_allow = True
 
-        return 0
+        return 1 if saw_allow else 0
 
     async def delete_permissions(self, user_id: int, permissions: list[str]) -> None:
         """Delete named permissions from a user.

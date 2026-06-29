@@ -3,10 +3,10 @@ from __future__ import annotations
 from sqlalchemy import select
 
 from app.entity.cart import Cart
-from app.repository.base_repository import BaseRepository
+from xime.starters.sqlalchemy import CrudRepository
 
 
-class CartRepository(BaseRepository[Cart]):
+class CartRepository(CrudRepository[Cart]):
     model = Cart
 
     async def find_by_user_id(self, user_id: int) -> list[Cart]:

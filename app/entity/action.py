@@ -3,7 +3,7 @@ from __future__ import annotations
 from sqlalchemy import BigInteger, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
-from app.entity.base import Base
+from xime.starters.sqlalchemy import Base
 
 
 class Action(Base):

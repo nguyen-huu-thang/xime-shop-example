@@ -41,9 +41,15 @@ class WishlistController:
 
     @get("/{id}")
     async def detail(self, id: int) -> WishlistResponse:
+        user = require_login()
         item = await self._svc.get_wishlist_item_by_id(id)
         if not item:
             raise AppException("E10200")
+        # Vá IDOR: chủ sở hữu hoặc người có quyền view_wishlists mới được xem
+        # Fix IDOR: only the owner or a holder of view_wishlists may view
+        await self._authz.require_owner_or_permission(
+            user, "view_wishlists", item, target_id=id
+        )
         return WishlistResponse.model_validate(item)
 
     @post("", status_code=201)

@@ -38,6 +38,21 @@ class ProductController:
         # Tổng sản phẩm cho phân trang FE (công khai, khớp với list công khai).
         return CountResponse(total=await self._svc.count_products())
 
+    @get("/managed")
+    async def managed_list(self, page: int = 1, limit: int = 10) -> list[dict]:
+        # Danh sách quản trị: chỉ sản phẩm thuộc mảng category nhân viên phụ trách.
+        # Superadmin / quyền global -> thấy tất cả. Storefront công khai (GET "") không bị ảnh hưởng.
+        # Admin list: only products within the employee's category scope; superadmin sees all.
+        user = require_login()
+        allowed = await self._authz.allowed_category_scope(user, "view_products")
+        return await self._svc.get_managed_product_dtos(allowed, page, limit)
+
+    @get("/managed/count")
+    async def managed_count(self) -> CountResponse:
+        user = require_login()
+        allowed = await self._authz.allowed_category_scope(user, "view_products")
+        return CountResponse(total=await self._svc.count_managed_products(allowed))
+
     @get("/by-category/{category_id}")
     async def by_category(self, category_id: int) -> list[dict]:
         products = await self._svc.get_products_by_category_id(category_id)
@@ -64,28 +79,35 @@ class ProductController:
     @post("", status_code=201)
     async def create(self, body: ProductCreateRequest) -> dict:
         user = require_login()
-        await self._authz.require(user, "create_product")
         data = body.model_dump(by_alias=True)
+        # create_product scope theo category: quyền theo nhánh category sản phẩm sắp tạo
+        # create_product is category-scoped: check against the new product's category
+        await self._authz.require(user, "create_product", target_id=data.get("categoryId"))
         return await self._svc.create_product(data)
 
     @put("/{id}")
     async def update(self, id: int, body: ProductUpdateRequest) -> dict:
         user = require_login()
-        await self._authz.require(user, "edit_product", target_id=id)
+        # Nạp product để authz giải scope theo category của nó (edit_product category-scoped)
+        # Load the product so authz can resolve scope by its category
+        product = await self._svc.get_product_by_id(id)
+        await self._authz.require(user, "edit_product", resource=product)
         data = body.model_dump(by_alias=True, exclude_unset=True)
         return await self._svc.update_product(id, data)
 
     @delete("/{id}")
     async def remove(self, id: int) -> MessageResponse:
         user = require_login()
-        await self._authz.require(user, "delete_product")
+        product = await self._svc.get_product_by_id(id)
+        await self._authz.require(user, "delete_product", resource=product)
         await self._svc.delete_product(id)
         return MessageResponse(message="Product deleted")
 
     @post("/{id}/attribute")
     async def update_attributes(self, id: int, body: ProductAttributeUpdateRequest) -> MessageResponse:
         user = require_login()
-        await self._authz.require(user, "edit_product", target_id=id)
+        product = await self._svc.get_product_by_id(id)
+        await self._authz.require(user, "edit_product", resource=product)
         data = body.model_dump()
         await self._svc.update_or_create_product_attributes_and_options(id, data)
         return MessageResponse(message="Attributes and options updated successfully")

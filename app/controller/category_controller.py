@@ -69,7 +69,9 @@ class CategoryController:
     @delete("/{id}")
     async def remove(self, id: int) -> MessageResponse:
         user = require_login()
-        await self._authz.require(user, "delete_category")
+        # delete_category scope theo category: target_id chính là category bị xóa (khớp nhánh)
+        # delete_category is category-scoped: target_id is the category being deleted
+        await self._authz.require(user, "delete_category", target_id=id)
         await self._svc.delete_category(id)
         return MessageResponse(message="Category deleted")
 

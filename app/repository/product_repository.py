@@ -3,10 +3,10 @@ from __future__ import annotations
 from sqlalchemy import func, or_, select
 
 from app.entity.product import Product
-from app.repository.base_repository import BaseRepository
+from xime.starters.sqlalchemy import CrudRepository
 
 
-class ProductRepository(BaseRepository[Product]):
+class ProductRepository(CrudRepository[Product]):
     model = Product
 
     async def count_active(self) -> int:
@@ -35,6 +35,35 @@ class ProductRepository(BaseRepository[Product]):
             .limit(limit)
         )
         return list(result.scalars().all())
+
+    async def find_paginated_in_categories(
+        self, category_ids: set[int], page: int, limit: int
+    ) -> list[Product]:
+        # Sản phẩm chưa xóa, thuộc các category cho phép (lọc theo mảng nhân viên)
+        # Non-deleted products within the allowed categories (employee-scope filter)
+        if not category_ids:
+            return []
+        offset = (page - 1) * limit
+        result = await self.session.execute(
+            select(Product)
+            .where(Product.is_delete.is_(False))
+            .where(Product.category_id.in_(category_ids))
+            .order_by(Product.id.asc())
+            .offset(offset)
+            .limit(limit)
+        )
+        return list(result.scalars().all())
+
+    async def count_active_in_categories(self, category_ids: set[int]) -> int:
+        if not category_ids:
+            return 0
+        result = await self.session.execute(
+            select(func.count())
+            .select_from(Product)
+            .where(Product.is_delete.is_(False))
+            .where(Product.category_id.in_(category_ids))
+        )
+        return int(result.scalar_one())
 
     async def search_by_keywords(self, keywords: str) -> list[Product]:
         pattern = f"%{keywords}%"

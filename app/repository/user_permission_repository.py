@@ -4,10 +4,10 @@ from sqlalchemy import select
 
 from app.entity.permission import Permission
 from app.entity.user_permission import UserPermission
-from app.repository.base_repository import BaseRepository
+from xime.starters.sqlalchemy import CrudRepository
 
 
-class UserPermissionRepository(BaseRepository[UserPermission]):
+class UserPermissionRepository(CrudRepository[UserPermission]):
     model = UserPermission
 
     async def find_user_permission(
@@ -39,3 +39,23 @@ class UserPermissionRepository(BaseRepository[UserPermission]):
             .where(UserPermission.permission_id == permission_id)
         )
         return result.scalar_one_or_none()
+
+    async def find_by_user_permission_target(
+        self, user_id: int, permission_id: int, target_id: int | None
+    ) -> UserPermission | None:
+        # Exact-match an entry (same user + permission + target) so assign is
+        # idempotent and never inserts duplicate rows. Uses .first() to tolerate any
+        # pre-existing duplicates without raising MultipleResultsFound.
+        # Tìm đúng entry (cùng user + permission + target) để assign idempotent,
+        # không bao giờ chèn bản ghi trùng.
+        stmt = (
+            select(UserPermission)
+            .where(UserPermission.user_id == user_id)
+            .where(UserPermission.permission_id == permission_id)
+        )
+        if target_id is None:
+            stmt = stmt.where(UserPermission.target_id.is_(None))
+        else:
+            stmt = stmt.where(UserPermission.target_id == target_id)
+        result = await self.session.execute(stmt.limit(1))
+        return result.scalars().first()

@@ -3,10 +3,10 @@ from __future__ import annotations
 from sqlalchemy import select
 
 from app.entity.product_attribute_value import ProductAttributeValue
-from app.repository.base_repository import BaseRepository
+from xime.starters.sqlalchemy import CrudRepository
 
 
-class ProductAttributeValueRepository(BaseRepository[ProductAttributeValue]):
+class ProductAttributeValueRepository(CrudRepository[ProductAttributeValue]):
     model = ProductAttributeValue
 
     async def find_by_attribute_id(self, attribute_id: int) -> list[ProductAttributeValue]:

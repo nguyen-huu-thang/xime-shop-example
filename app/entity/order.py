@@ -3,7 +3,7 @@ from __future__ import annotations
 from sqlalchemy import BigInteger, Boolean, ForeignKey, Numeric, String
 from sqlalchemy.orm import Mapped, mapped_column
 
-from app.entity.base import Base, TimestampMixin
+from xime.starters.sqlalchemy import Base, TimestampMixin
 
 
 class Order(TimestampMixin, Base):

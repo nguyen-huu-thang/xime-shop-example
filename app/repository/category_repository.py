@@ -3,10 +3,10 @@ from __future__ import annotations
 from sqlalchemy import select
 
 from app.entity.category import Category
-from app.repository.base_repository import BaseRepository
+from xime.starters.sqlalchemy import CrudRepository
 
 
-class CategoryRepository(BaseRepository[Category]):
+class CategoryRepository(CrudRepository[Category]):
     model = Category
 
     async def find_by_parent_id(self, parent_id: int) -> list[Category]:

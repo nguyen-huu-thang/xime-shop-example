@@ -10,7 +10,7 @@ from alembic import context
 
 # Import Base + toàn bộ entity (side effect: đăng ký vào Base.metadata)
 import app.entity  # noqa: F401
-from app.entity.base import Base
+from xime.starters.sqlalchemy import Base
 
 config = context.config
 

@@ -3,10 +3,10 @@ from __future__ import annotations
 from sqlalchemy import select
 
 from app.entity.coupon import Coupon
-from app.repository.base_repository import BaseRepository
+from xime.starters.sqlalchemy import CrudRepository
 
 
-class CouponRepository(BaseRepository[Coupon]):
+class CouponRepository(CrudRepository[Coupon]):
     model = Coupon
 
     async def find_by_code(self, code: str) -> Coupon | None:

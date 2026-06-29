@@ -57,7 +57,10 @@ class GroupPermissionController:
         group_id = body.get("group_id")
         permission_name = body.get("permission_name")
         target_id = body.get("target_id")
-        result = await self._svc.has_permission(group_id, permission_name, target_id)
+        # Endpoint kiểm tra grant thô theo đúng target (không resolve cây category)
+        # Raw-grant introspection against the exact target (no category-tree resolution)
+        scope_ids = {target_id} if target_id is not None else set()
+        result = await self._svc.has_permission(group_id, permission_name, scope_ids)
         return {"has_permission": result}
 
     @delete("")

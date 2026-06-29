@@ -5,10 +5,10 @@ from datetime import UTC, datetime
 from sqlalchemy import delete
 
 from app.entity.blacklist_token import BlacklistToken
-from app.repository.base_repository import BaseRepository
+from xime.starters.sqlalchemy import CrudRepository
 
 
-class BlacklistTokenRepository(BaseRepository[BlacklistToken]):
+class BlacklistTokenRepository(CrudRepository[BlacklistToken]):
     model = BlacklistToken
 
     async def delete_expired(self) -> None:

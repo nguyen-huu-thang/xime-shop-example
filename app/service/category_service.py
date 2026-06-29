@@ -8,6 +8,7 @@ from sqlalchemy import update as sa_update
 
 from xime.core.transaction.manager import TransactionManager
 
+from app.cache.category_tree_cache import CategoryTreeCache
 from app.entity.category import Category
 from app.entity.product import Product
 from app.exception.app_exception import AppException
@@ -19,9 +20,35 @@ class CategoryService:
         self,
         transaction: TransactionManager,
         category_repository: CategoryRepository,
+        category_tree_cache: CategoryTreeCache,
     ) -> None:
         self._transaction = transaction
         self._repo = category_repository
+        self._tree_cache = category_tree_cache
+
+    async def _ensure_tree_loaded(self) -> None:
+        # Nạp cây category vào RAM lần đầu (hoặc sau invalidate)
+        # Load the category tree into RAM on first use (or after invalidate)
+        if not self._tree_cache.is_loaded():
+            async with self._transaction():
+                cats = await self._repo.find_all()
+            self._tree_cache.load([(c.id, c.parent_id) for c in cats])
+
+    async def get_ancestor_ids(self, category_id: int) -> list[int]:
+        """Chuỗi tổ tiên gồm cả chính nó: [category_id, parent, ..., root].
+        Dùng cho phân quyền theo nhánh - khớp target là category cha."""
+        await self._ensure_tree_loaded()
+        return self._tree_cache.ancestor_ids(category_id)
+
+    async def get_descendant_ids(self, category_id: int) -> set[int]:
+        """Tập category_id + toàn bộ con cháu - dùng cho lọc danh sách theo nhánh."""
+        await self._ensure_tree_loaded()
+        return self._tree_cache.descendant_ids(category_id)
+
+    async def get_all_category_ids(self) -> set[int]:
+        """Tất cả category id - dùng để tính tập category được phép khi lọc danh sách."""
+        await self._ensure_tree_loaded()
+        return self._tree_cache.all_ids()
 
     async def get_all_categories(self) -> list[Category]:
         async with self._transaction():
@@ -87,7 +114,11 @@ class CategoryService:
                 description=data.get("description"),
                 parent_id=parent_id,
             )
-            return await self._repo.save(cat)
+            await self._repo.save(cat)
+        # Cây thay đổi -> invalidate cache (sau commit)
+        # Tree changed -> invalidate cache (after commit)
+        self._tree_cache.invalidate()
+        return cat
 
     async def update_category(self, category_id: int, data: dict) -> Category:
         async with self._transaction():
@@ -113,7 +144,11 @@ class CategoryService:
             cat.parent_id = raw_parent if raw_parent else None
 
         async with self._transaction():
-            return await self._repo.save(cat)
+            await self._repo.save(cat)
+        # Cây có thể đổi parent -> invalidate cache (sau commit)
+        # Parent may have changed -> invalidate cache (after commit)
+        self._tree_cache.invalidate()
+        return cat
 
     async def delete_category(self, category_id: int) -> None:
         """Reassign children + products to parent, then delete category.
@@ -132,7 +167,9 @@ class CategoryService:
             children = await self._repo.find_by_parent_id(category_id)
             for child in children:
                 child.parent_id = parent_id
-                await self._repo.save(child)
+            # Một flush cho cả lô con thay vì flush từng cái
+            # One flush for the whole batch instead of per child
+            await self._repo.save_all(children)
 
             # Reassign products to parent using bulk UPDATE
             # Cập nhật category_id của sản phẩm sang parent bằng bulk UPDATE
@@ -145,6 +182,9 @@ class CategoryService:
             category = await self._repo.find(category_id)
             if category:
                 await self._repo.delete(category)
+        # Cây thay đổi (xóa node + đổi parent con/sản phẩm) -> invalidate cache (sau commit)
+        # Tree changed (node removed + children/products reparented) -> invalidate cache
+        self._tree_cache.invalidate()
 
     async def find_products_by_category_id(self, category_id: int) -> list[Product]:
         """Return raw product entities for a category (used by ProductService).

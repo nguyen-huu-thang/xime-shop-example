@@ -3,10 +3,10 @@ from __future__ import annotations
 from sqlalchemy import func, select
 
 from app.entity.product_option import ProductOption
-from app.repository.base_repository import BaseRepository
+from xime.starters.sqlalchemy import CrudRepository
 
 
-class ProductOptionRepository(BaseRepository[ProductOption]):
+class ProductOptionRepository(CrudRepository[ProductOption]):
     model = ProductOption
 
     async def find_by_product_id(self, product_id: int) -> list[ProductOption]:

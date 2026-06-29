@@ -3,10 +3,10 @@ from __future__ import annotations
 from sqlalchemy import select
 
 from app.entity.user import User
-from app.repository.base_repository import BaseRepository
+from xime.starters.sqlalchemy import CrudRepository
 
 
-class UserRepository(BaseRepository[User]):
+class UserRepository(CrudRepository[User]):
     model = User
 
     async def find_by_username(self, username: str) -> User | None:

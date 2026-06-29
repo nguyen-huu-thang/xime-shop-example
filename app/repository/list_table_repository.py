@@ -1,8 +1,8 @@
 from app.entity.list_table import ListTable
-from app.repository.base_repository import BaseRepository
+from xime.starters.sqlalchemy import CrudRepository
 
 
-class ListTableRepository(BaseRepository[ListTable]):
+class ListTableRepository(CrudRepository[ListTable]):
     model = ListTable
 
     async def find_by_table_name(self, table_name: str) -> ListTable | None:

@@ -3,7 +3,7 @@ from __future__ import annotations
 from sqlalchemy import BigInteger, ForeignKey, Integer, Numeric
 from sqlalchemy.orm import Mapped, mapped_column
 
-from app.entity.base import Base
+from xime.starters.sqlalchemy import Base
 
 
 class ProductOption(Base):

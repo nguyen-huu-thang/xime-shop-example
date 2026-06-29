@@ -3,10 +3,10 @@ from __future__ import annotations
 from sqlalchemy import select
 
 from app.entity.group import Group
-from app.repository.base_repository import BaseRepository
+from xime.starters.sqlalchemy import CrudRepository
 
 
-class GroupRepository(BaseRepository[Group]):
+class GroupRepository(CrudRepository[Group]):
     model = Group
 
     async def find_all_paginated(self, page: int, limit: int) -> list[Group]:

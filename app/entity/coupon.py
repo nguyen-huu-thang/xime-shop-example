@@ -5,7 +5,7 @@ from datetime import datetime
 from sqlalchemy import BigInteger, Boolean, DateTime, Numeric, String
 from sqlalchemy.orm import Mapped, mapped_column
 
-from app.entity.base import Base
+from xime.starters.sqlalchemy import Base
 
 
 class Coupon(Base):

@@ -5,7 +5,7 @@ from datetime import datetime
 from sqlalchemy import DateTime, String
 from sqlalchemy.orm import Mapped, mapped_column
 
-from app.entity.base import Base
+from xime.starters.sqlalchemy import Base
 
 
 class BlacklistToken(Base):

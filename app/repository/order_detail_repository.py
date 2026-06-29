@@ -3,10 +3,10 @@ from __future__ import annotations
 from sqlalchemy import func, select
 
 from app.entity.order_detail import OrderDetail
-from app.repository.base_repository import BaseRepository
+from xime.starters.sqlalchemy import CrudRepository
 
 
-class OrderDetailRepository(BaseRepository[OrderDetail]):
+class OrderDetailRepository(CrudRepository[OrderDetail]):
     model = OrderDetail
 
     async def top_selling(self, limit: int) -> list[tuple[int, str, int]]:

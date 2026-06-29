@@ -45,7 +45,13 @@ class OrderController:
 
     @get("/{id}")
     async def detail(self, id: int) -> OrderResponse:
+        user = require_login()
         order, details = await self._svc.get_order_by_id(id)
+        # Vá IDOR: chủ đơn hoặc người có quyền xem chi tiết đơn mới được xem
+        # Fix IDOR: only the order owner or a holder of view_order_details may view
+        await self._authz.require_owner_or_permission(
+            user, "view_order_details", order, target_id=id
+        )
         return OrderResponse.from_entities(order, details)
 
     @post("", status_code=201)

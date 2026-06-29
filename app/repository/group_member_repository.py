@@ -4,10 +4,10 @@ from sqlalchemy import func, select
 
 from app.entity.group import Group
 from app.entity.group_member import GroupMember
-from app.repository.base_repository import BaseRepository
+from xime.starters.sqlalchemy import CrudRepository
 
 
-class GroupMemberRepository(BaseRepository[GroupMember]):
+class GroupMemberRepository(CrudRepository[GroupMember]):
     model = GroupMember
 
     async def find_by_user_id(self, user_id: int) -> list[GroupMember]:

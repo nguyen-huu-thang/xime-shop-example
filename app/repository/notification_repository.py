@@ -3,10 +3,10 @@ from datetime import datetime, timezone
 from sqlalchemy import delete, select, update
 
 from app.entity.notification import Notification
-from app.repository.base_repository import BaseRepository
+from xime.starters.sqlalchemy import CrudRepository
 
 
-class NotificationRepository(BaseRepository[Notification]):
+class NotificationRepository(CrudRepository[Notification]):
     model = Notification
 
     async def find_all_notifications(self) -> list[Notification]:

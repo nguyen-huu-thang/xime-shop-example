@@ -5,7 +5,7 @@ from datetime import datetime
 from sqlalchemy import BigInteger, Boolean, DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
-from app.entity.base import Base
+from xime.starters.sqlalchemy import Base
 
 
 class File(Base):

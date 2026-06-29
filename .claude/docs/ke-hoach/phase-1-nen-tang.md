@@ -32,8 +32,10 @@ context người dùng. Sau phase này, mỗi module chỉ còn việc CRUD theo
   + dataclass `ErrorDef` + `get_error()` fallback E0000).
 - [x] **1.8** `app/exception/app_exception.py` — `AppException(error_key, custom_message?)`.
 - [x] **1.9** `app/exception/handler.py` + `app/shop_web_adapter.py` — `AppException` → JSON
-  `{errorKey, code, message}` đúng http_status. Subclass `WebAdapter` (framework chưa có hook public —
-  xem [`framework-issues/issue-002`](../../framework-issues/issue-002-no-exception-handler-hook.md)).
+  `{errorKey, code, message}` đúng http_status. Subclass `WebAdapter` (lúc đó framework chưa có hook public).
+  > Cập nhật 2026-06-29: đã gỡ `app/shop_web_adapter.py`, chuyển sang `configure_exception_handlers(...)`
+  > trong `app/config/web.py`; issue-002 đã đóng (file đã xóa). Xem
+  > [`go-web-adapter-dung-configure.md`](../go-web-adapter-dung-configure.md).
 - [x] **1.10** Handler lỗi validation Pydantic → JSON `E10711` (kèm `details`).
 
 ### Security (current_user)
@@ -59,5 +61,7 @@ context người dùng. Sau phase này, mỗi module chỉ còn việc CRUD theo
 - **Bind `TransactionManager → SqlAlchemyTransactionManager`** trong `dependency.py`. Lưu ý:
   `app.get(TransactionManager)` (Protocol) KHÔNG resolve trực tiếp — binding chỉ áp dụng khi inject
   vào constructor. Test lấy class cụ thể `SqlAlchemyTransactionManager`.
-- **Exception handler:** subclass `WebAdapter` → override `build_app` (vì `start()` gọi `build_app`).
+- **Exception handler:** ~~subclass `WebAdapter` → override `build_app`~~ - nay dùng
+  `configure_exception_handlers({...})` trong `app/config/web.py` (framework đã có hook public).
+  Xem [`go-web-adapter-dung-configure.md`](../go-web-adapter-dung-configure.md).
 - **JWT config** (secret, issuer, audience, TTL) → thêm ở Phase 3 cùng middleware.

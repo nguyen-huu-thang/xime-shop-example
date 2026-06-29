@@ -1,10 +1,10 @@
 from sqlalchemy import select
 
 from app.entity.file import File
-from app.repository.base_repository import BaseRepository
+from xime.starters.sqlalchemy import CrudRepository
 
 
-class FileRepository(BaseRepository[File]):
+class FileRepository(CrudRepository[File]):
     model = File
 
     async def find_by_user(self, user_id: int) -> list[File]:

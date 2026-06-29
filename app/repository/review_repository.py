@@ -1,10 +1,10 @@
 from sqlalchemy import select
 
 from app.entity.review import Review
-from app.repository.base_repository import BaseRepository
+from xime.starters.sqlalchemy import CrudRepository
 
 
-class ReviewRepository(BaseRepository[Review]):
+class ReviewRepository(CrudRepository[Review]):
     model = Review
 
     async def find_by_product_id(self, product_id: int) -> list[Review]:

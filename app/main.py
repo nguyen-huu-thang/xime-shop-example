@@ -1,10 +1,10 @@
 from xime import Application
 
-from app.shop_web_adapter import ShopWebAdapter
+from xime.adapters.web import WebAdapter
 
 # Entry point - khởi động toàn bộ ứng dụng shop backend
 # Entry point - starts the whole shop backend application
 app = Application()
 
 if __name__ == "__main__":
-    app.use(ShopWebAdapter()).run()
+    app.use(WebAdapter()).run()

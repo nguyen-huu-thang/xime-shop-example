@@ -10,7 +10,7 @@ import pytest
 from sqlalchemy import select
 
 from app.config.dependency import dependency
-from app.entity.base import Base
+from xime.starters.sqlalchemy import Base
 from app.entity.category import Category
 from app.entity.group import Group
 from app.entity.order import Order

@@ -5,10 +5,10 @@ from datetime import UTC, datetime
 from sqlalchemy import delete
 
 from app.entity.refresh_token import RefreshToken
-from app.repository.base_repository import BaseRepository
+from xime.starters.sqlalchemy import CrudRepository
 
 
-class RefreshTokenRepository(BaseRepository[RefreshToken]):
+class RefreshTokenRepository(CrudRepository[RefreshToken]):
     model = RefreshToken
 
     async def delete_expired(self) -> None:

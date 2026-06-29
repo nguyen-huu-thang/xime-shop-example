@@ -14,31 +14,54 @@ Mỗi bản ghi quyền gồm: `permission_id`, `target_id`, `is_active`, `is_de
 | `is_active` | Quyền đã bật chưa. Admin có thể setup sẵn nhưng chưa kích hoạt. |
 | `is_denied` | Từ chối quyền. **Denied thắng** — dù được cấp ở nơi khác vẫn bị chặn. |
 
-## Thuật toán `check_permission` (port từ PHP)
+## Thuật toán `check_permission` (deny-overrides trong từng cấp)
+
+> ⚠️ **Cập nhật 2026-06-29 (review bảo mật):** thuật toán cũ thoát sớm theo bản ghi/nhóm đầu
+> tiên khớp, nên một `allow` có thể che mất một `deny` tùy thứ tự DB trả về - phá vỡ nguyên
+> tắc "deny thắng". Đã sửa sang **deny-overrides trong từng cấp**: quét HẾT bản ghi/nhóm áp
+> dụng được; có deny là chặn, không thì mới xét allow. Vẫn giữ **ưu tiên cấp user > group**
+> (quyền cấp user cho phép vẫn override group - để admin gỡ riêng cho 1 người).
 
 ```
 check_permission(user, permission_name, target_id=None, is_user_owned=False) -> bool:
-    # 1. Quyền cá nhân
+    # 1. Quyền cá nhân (deny thắng trong cấp này)
     up = user_permission_service.has_permission(user.id, permission_name, target_id)
     if up < 0:  return False      # bị denied ở cấp user → chặn ngay
-    if up > 0:  return True       # được cấp ở cấp user → cho phép
+    if up > 0:  return True       # được cấp ở cấp user → cho phép (override group)
     # up == 0: không có bản ghi user → xét tiếp
 
     if is_user_owned:  return True  # tài nguyên do chính user sở hữu
 
-    # 2. Quyền nhóm
+    # 2. Quyền nhóm (deny-overrides trên TẤT CẢ nhóm, không thoát sớm)
     groups = group_member_service.find_groups_by_user(user)
+    saw_group_allow = False
     for g in groups:
-        if group_permission_service.has_permission(g, permission_name, target_id):
-            return True
+        gp = group_permission_service.has_permission(g, permission_name, target_id)
+        if gp < 0:  return False           # bất kỳ nhóm nào deny → chặn ngay
+        if gp > 0:  saw_group_allow = True  # nhớ lại, KHÔNG return sớm
+    if saw_group_allow:  return True
 
     # 3. Mặc định của permission
     permission = permission_service.get_permission_by_name(permission_name)
     return permission.default_allow if permission else False
 ```
 
-> `has_permission` của user trả về **3 trạng thái**: `< 0` (denied), `> 0` (granted), `0` (không có).
-> Cần giữ đúng semantics 3 trạng thái này khi port.
+> `has_permission` (user và group) trả về **3 trạng thái**: `< 0` (denied), `> 0` (granted),
+> `0` (không có). Bản thân nó cũng theo **deny-overrides**: quét hết bản ghi áp dụng được
+> (global `target_id is None` HOẶC khớp `target_id`); gặp deny là `-1`, hết vòng có allow là
+> `1`, còn lại `0`. Không return theo bản ghi đầu tiên.
+
+> ✅ **Đã chốt chính sách (QĐ phân quyền, 2026-06-29): ưu tiên theo cấp user > group, trong mỗi
+> cấp deny thắng.** Nghĩa là:
+>
+> - Trong cấp user: có deny là chặn, không thì xét allow (deny-overrides nội bộ cấp user).
+> - Trong cấp group: bất kỳ nhóm nào deny là chặn, không thì xét allow (deny-overrides nội bộ cấp group).
+> - Giữa hai cấp: **user thắng group** - user được cấp riêng (allow, không có deny ở cấp user) sẽ
+>   override deny ở cấp nhóm. Chủ ý để admin gỡ/cấp riêng cho một người bất kể nhóm.
+>
+> Đã loại phương án "deny tuyệt đối toàn cục" (deny ở bất kỳ đâu là chặn kể cả khi user được cấp
+> riêng) vì mất khả năng admin gỡ riêng cho một người. Nếu sau này đổi ý, chỉ cần sửa bước 1 của
+> `check_permission`: quét deny mọi cấp trước rồi mới xét allow.
 
 > ✅ **Đã chốt (QĐ-3):** bảng `permissions` có cột `default_allow` (Boolean, default False) làm fallback.
 > Không đặt tên cột `default` (từ khóa SQL). Xem [`quyet-dinh-thiet-ke.md`](quyet-dinh-thiet-ke.md#qđ-3-bảng-permissions--thêm-cột-default-boolean).
@@ -64,6 +87,25 @@ class AuthorizationService:
         if not await self.check_permission(user, permission_name, target_id, is_user_owned):
             raise AppException("E2021")          # không được phép
 ```
+
+## Nâng cấp đã triển khai (2026-06-29) — xem [`phan-quyen-nang-cap.md`](phan-quyen-nang-cap.md)
+
+Đã bổ sung (8 phase, full suite 100 pass):
+
+- **Superadmin bypass:** cột `users.is_superadmin`; `check_permission` trả True ngay ở bước 0.
+- **Cache RAM (một tiến trình):** `PermissionRegistry` (bảng permissions) + `CategoryTreeCache`
+  (cây category), pure-storage + invalidate khi CRUD. `get_effective_permissions` viết lại
+  load-once (hết N+1).
+- **Ownership tập trung:** `require_owner_or_permission(user, perm, resource)` cho tài nguyên người
+  mua (cart/wishlist/order = `resource.user_id == user.id`); đã vá IDOR `order.detail`/`wishlist.detail`.
+- **Scope theo nhánh category:** cột `permissions.scope_type` (`'category'`). `has_permission` khớp
+  theo **tập** `scope_ids`; quyền category-scope dùng chuỗi tổ tiên của category resource ->
+  cấp ở category cha áp cho cả subtree; deny ở nhánh con chỉ chặn đúng nhánh đó.
+- **Lọc danh sách quản trị:** `allowed_category_scope(user, perm)` + endpoint `GET /api/products/managed`
+  (nhân viên chỉ thấy mảng mình; superadmin thấy tất cả). Storefront công khai `GET /api/products` giữ nguyên.
+
+> Lưu ý: instance-level cũ vẫn còn (quyền `scope_type=null` khớp đúng `target_id`); category-scope
+> là tổng quát hóa. Ownership cho nhân viên (đa shop) để dành tương lai.
 
 ## Danh sách quyền (~55 quyền — seed ban đầu)
 

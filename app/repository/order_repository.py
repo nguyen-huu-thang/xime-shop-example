@@ -5,10 +5,10 @@ from datetime import datetime
 from sqlalchemy import func, select
 
 from app.entity.order import Order
-from app.repository.base_repository import BaseRepository
+from xime.starters.sqlalchemy import CrudRepository
 
 
-class OrderRepository(BaseRepository[Order]):
+class OrderRepository(CrudRepository[Order]):
     model = Order
 
     async def find_by_user_id(self, user_id: int) -> list[Order]:

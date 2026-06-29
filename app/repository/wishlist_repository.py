@@ -1,10 +1,10 @@
 from sqlalchemy import select
 
 from app.entity.wishlist import Wishlist
-from app.repository.base_repository import BaseRepository
+from xime.starters.sqlalchemy import CrudRepository
 
 
-class WishlistRepository(BaseRepository[Wishlist]):
+class WishlistRepository(CrudRepository[Wishlist]):
     model = Wishlist
 
     async def find_by_user_id(self, user_id: int) -> list[Wishlist]:

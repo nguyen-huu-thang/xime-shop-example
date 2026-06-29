@@ -56,6 +56,9 @@ controller/service/repository/entity, test pass. Các cải tiến đã làm sau
 - **Cache** catalog (InMemoryCacheService, đổi sang Redis được) + invalidation.
 - **Dashboard** thống kê: `GET /api/dashboard/stats`.
 - Vá bug: thiếu quyền `view_files`/`delete_file` trong seed.
+- **Gỡ `ShopWebAdapter` tự viết** -> dùng API `configure_cors` / `configure_middleware` /
+  `configure_exception_handlers` của Xime trong `app/config/web.py`; `main.py` chỉ còn `WebAdapter()`.
+  Chi tiết wiring web layer: [`.claude/docs/go-web-adapter-dung-configure.md`](.claude/docs/go-web-adapter-dung-configure.md).
 
 
 ## framework issues

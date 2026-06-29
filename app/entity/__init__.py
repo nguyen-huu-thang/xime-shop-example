@@ -4,7 +4,7 @@ Export Base + toàn bộ entity.
 Import package này (hoặc các module con) để mọi entity đăng ký vào Base.metadata -
 cần cho Alembic autogenerate.
 """
-from app.entity.base import Base, TimestampMixin
+from xime.starters.sqlalchemy import Base, TimestampMixin
 
 # Cluster A - user & phân quyền
 from app.entity.user import User
