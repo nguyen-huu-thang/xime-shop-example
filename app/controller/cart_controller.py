@@ -8,6 +8,7 @@ from app.exception.app_exception import AppException
 from app.security.current_user import require_login
 from app.service.authorization_service import AuthorizationService
 from app.service.cart_service import CartService
+from app.service.interaction_service import InteractionService
 from app.service.product_service import ProductService
 
 
@@ -20,10 +21,12 @@ class CartController:
         cart_service: CartService,
         product_service: ProductService,
         authorization_service: AuthorizationService,
+        interaction_service: InteractionService,
     ) -> None:
         self._svc = cart_service
         self._product_svc = product_service
         self._authz = authorization_service
+        self._interaction = interaction_service
 
     async def _item_to_dict(self, item) -> dict:
         # Enrich each line with product name + unit price so the cart page can show
@@ -82,7 +85,11 @@ class CartController:
         await self._authz.require(user, "create_cart")
         data = body.model_dump(by_alias=False)
         item = await self._svc.create_cart_item(user.id, data)
-        return await self._item_to_dict(item)
+        result = await self._item_to_dict(item)
+        # Ghi tín hiệu "add_to_cart" cho cá nhân hóa (fault-tolerant, không throttle tín hiệu mạnh)
+        # Record an "add_to_cart" signal for personalization
+        await self._interaction.record(user.id, result["productId"], "add_to_cart")
+        return result
 
     @put("/{id}")
     async def update(self, id: int, body: CartUpdateRequest) -> dict:

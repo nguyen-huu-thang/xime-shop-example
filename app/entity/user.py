@@ -16,6 +16,10 @@ class User(TimestampMixin, Base):
     phone: Mapped[str | None] = mapped_column(String(15), nullable=True)
     address: Mapped[str | None] = mapped_column(String(255), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true", nullable=False)
+    # Email đã xác minh chưa (luồng verify_email). Demo: KHÔNG chặn đăng nhập nếu chưa xác minh.
+    email_verified: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="false", nullable=False
+    )
     # Superadmin bypasses all permission checks (set only for the initial admin / trusted owner)
     # Superadmin vượt qua mọi kiểm tra quyền (chỉ đặt cho admin khởi tạo / chủ hệ thống tin cậy)
     is_superadmin: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false", nullable=False)

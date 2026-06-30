@@ -11,3 +11,4 @@ class UserResponse(BaseModel):
     phone: str | None = None
     address: str | None = None
     is_active: bool = True
+    email_verified: bool = False

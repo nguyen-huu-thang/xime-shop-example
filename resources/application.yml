@@ -49,3 +49,20 @@ cors:
 storage:
   local:
     root: "public/data"
+
+# Email - gửi qua SMTP (starter xime.starters.mail -> SmtpMailService).
+# CHỖ TRỐNG CHO BẠN ĐIỀN: username + password (Gmail app password) + from.
+# - host/port/use_tls đã đặt sẵn cho Gmail (STARTTLS cổng 587). KHÔNG cần đổi nếu dùng Gmail.
+# - username/password để TRỐNG -> app TỰ TẮT gửi email (EmailService bỏ qua, chỉ log) nên
+#   không gọi mạng khi chạy test. Điền đủ username + password mới bật gửi thật.
+# - BẢO MẬT: KHÔNG commit app password thật. Nên điền vào resources/application-local.yml
+#   (đã gitignore) thay vì file này, hoặc mount lúc runtime (xem framework-issues/issue-004).
+mail:
+  from: ""                       # vd: "Shop Demo <bạn@gmail.com>" - ĐIỀN VÀO
+  smtp:
+    host: "smtp.gmail.com"
+    port: 587
+    username: ""                 # vd: "bạn@gmail.com" - ĐIỀN VÀO
+    password: ""                 # Gmail App Password (16 ký tự) - ĐIỀN VÀO (đừng commit)
+    use_tls: true                # STARTTLS cho cổng 587
+    timeout: 10                  # giây - timeout mỗi lần gửi

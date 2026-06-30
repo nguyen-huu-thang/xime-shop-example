@@ -8,6 +8,7 @@ from app.dto.response.wishlist_response import WishlistResponse
 from app.exception.app_exception import AppException
 from app.security.current_user import require_login
 from app.service.authorization_service import AuthorizationService
+from app.service.interaction_service import InteractionService
 from app.service.wishlist_service import WishlistService
 
 
@@ -19,9 +20,11 @@ class WishlistController:
         self,
         wishlist_service: WishlistService,
         authorization_service: AuthorizationService,
+        interaction_service: InteractionService,
     ) -> None:
         self._svc = wishlist_service
         self._authz = authorization_service
+        self._interaction = interaction_service
 
     @get("/all")
     async def list(self) -> list[WishlistResponse]:
@@ -57,6 +60,9 @@ class WishlistController:
         user = require_login()
         data = body.model_dump(by_alias=True)
         item = await self._svc.create_wishlist_item(data, user.id)
+        # Ghi tín hiệu "wishlist" cho cá nhân hóa (fault-tolerant)
+        # Record a "wishlist" signal for personalization
+        await self._interaction.record(user.id, item.product_id, "wishlist")
         return WishlistResponse.model_validate(item)
 
     @delete("/{id}")

@@ -17,6 +17,20 @@ class ProductAttributeValueRepository(CrudRepository[ProductAttributeValue]):
         )
         return list(result.scalars().all())
 
+    async def find_by_attribute_ids(
+        self, attribute_ids: set[int]
+    ) -> list[ProductAttributeValue]:
+        # Batch load: gom giá trị của nhiều thuộc tính trong 1 query (chống N+1)
+        # Batch load values of many attributes in one query (avoid N+1)
+        if not attribute_ids:
+            return []
+        result = await self.session.execute(
+            select(ProductAttributeValue)
+            .where(ProductAttributeValue.attribute_id.in_(attribute_ids))
+            .order_by(ProductAttributeValue.id.asc())
+        )
+        return list(result.scalars().all())
+
     async def find_by_value_and_attribute_id(
         self, value: str, attribute_id: int
     ) -> ProductAttributeValue | None:

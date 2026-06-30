@@ -19,6 +19,9 @@ class Notification(Base):
     message: Mapped[str | None] = mapped_column(Text, nullable=True)
     # type: email | sms | push (validate ở tầng service/DTO)
     type: Mapped[str] = mapped_column(String(10), default="push", server_default="push", nullable=False)
+    # FE link to navigate to when the notification is clicked (e.g. /orders/12)
+    # Đường dẫn FE để bấm vào điều hướng (vd /orders/12); null = không điều hướng
+    link: Mapped[str | None] = mapped_column(String(255), nullable=True)
     is_read: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false", nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False

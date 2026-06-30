@@ -2,6 +2,7 @@ from xime import BindingConfig
 from xime.core.transaction.manager import TransactionManager
 from xime.starters.cache import CacheService
 from xime.starters.localfs import LocalFileStorage
+from xime.starters.mail import MailService, SmtpMailService
 from xime.starters.sqlalchemy import SqlAlchemyTransactionManager
 from xime.starters.storage import StorageService
 
@@ -25,12 +26,17 @@ dependency.scan(
     "xime.starters.sqlalchemy",
     # Starter localfs - LocalFileStorage (lưu file qua StorageService, đọc storage.local.root)
     "xime.starters.localfs",
+    # Starter mail - SmtpMailService (gửi email qua SMTP, đọc mail.*). Cần mail.smtp.host.
+    "xime.starters.mail",
     # Các tầng ứng dụng (đa lớp)
     "app.controller",
     "app.service",
     "app.repository",
     "app.security",
     "app.cache",
+    # Job định kỳ (Xime scheduler) - đăng ký job class để resolver resolve khi cron chạy.
+    # Lịch khai báo trong app/config/scheduler.py (framework tự nạp mọi module trong app.config).
+    "app.job",
 )
 
 # ── Protocol → Implementation bindings ───────────────────────────────────────
@@ -44,4 +50,8 @@ dependency.bind({
     # CacheService (Protocol framework) → InMemoryCacheService (cache catalog trong RAM).
     # Đổi sang RedisCacheService khi deploy nhiều worker (chỉ sửa dòng bind + cấu hình redis.*).
     CacheService: InMemoryCacheService,
+    # MailService (Protocol framework) → SmtpMailService (gửi email SMTP, đọc mail.*).
+    # SmtpMailService.__init__ cần mail.smtp.host (đã đặt sẵn smtp.gmail.com trong application.yml).
+    # Đổi sang backend khác (SendGrid/SES) sau này chỉ sửa dòng bind này.
+    MailService: SmtpMailService,
 })

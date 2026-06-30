@@ -18,6 +18,7 @@ from xime.core.transaction.manager import TransactionManager
 from app.entity.order import Order
 from app.entity.order_detail import OrderDetail
 from app.exception.app_exception import AppException
+from app.repository.address_repository import AddressRepository
 from app.repository.cart_repository import CartRepository
 from app.repository.order_detail_repository import OrderDetailRepository
 from app.repository.order_repository import OrderRepository
@@ -26,7 +27,9 @@ from app.repository.product_attribute_value_repository import ProductAttributeVa
 from app.repository.product_option_repository import ProductOptionRepository
 from app.repository.product_option_value_repository import ProductOptionValueRepository
 from app.repository.product_repository import ProductRepository
+from app.service import pricing
 from app.service.authorization_service import AuthorizationService
+from app.service.coupon_service import CouponService
 
 
 class OrderService:
@@ -41,6 +44,8 @@ class OrderService:
         product_option_value_repository: ProductOptionValueRepository,
         product_attribute_value_repository: ProductAttributeValueRepository,
         product_attribute_repository: ProductAttributeRepository,
+        address_repository: AddressRepository,
+        coupon_service: CouponService,
         authorization_service: AuthorizationService,
     ) -> None:
         self._transaction = transaction
@@ -52,6 +57,8 @@ class OrderService:
         self._option_val_repo = product_option_value_repository
         self._attr_val_repo = product_attribute_value_repository
         self._attr_repo = product_attribute_repository
+        self._address_repo = address_repository
+        self._coupon_svc = coupon_service
         self._authz = authorization_service
 
     # ── Read helpers ───────────────────────────────────────────────────────────
@@ -125,6 +132,70 @@ class OrderService:
                 result[attr.name] = pav.value
         return json.dumps(result)
 
+    # ── Tính tiền & xem trước (preview) ─────────────────────────────────────────
+
+    async def _subtotal_from_cart(self, cart_items: list) -> float:
+        """Tổng tiền hàng từ các cart item (giá lấy theo product_option). Trong transaction."""
+        subtotal = 0.0
+        for item in cart_items:
+            opt = await self._option_repo.find(item.product_option_id)
+            if not opt:
+                raise AppException("E10502")
+            subtotal += item.quantity * float(opt.price or 0)
+        return subtotal
+
+    async def _verify_address_owner(self, address_id: int, user_id: int):
+        """Lấy địa chỉ thuộc về user; không thấy / không phải của user -> E10320. Trong transaction."""
+        addr = await self._address_repo.find(address_id)
+        if not addr or addr.user_id != user_id:
+            raise AppException("E10320")
+        return addr
+
+    async def preview_order(
+        self,
+        user_id: int,
+        cart_ids: list[int],
+        address_id: int | None,
+        coupon_code: str | None,
+    ) -> dict:
+        """Tính breakdown tiền cho FE (subtotal, ship, giảm giá, total). KHÔNG tạo đơn."""
+        if not cart_ids:
+            raise AppException("E10505")
+        async with self._transaction():
+            cart_items = await self._cart_repo.find_by_ids(cart_ids)
+            if not cart_items:
+                raise AppException("E10505")
+            if address_id is not None:
+                await self._verify_address_owner(address_id, user_id)
+
+            subtotal = await self._subtotal_from_cart(cart_items)
+            ship = pricing.shipping_fee(subtotal)
+            product_discount = 0.0
+            ship_discount = 0.0
+            coupon_applied = False
+            applied_code: str | None = None
+            if coupon_code:
+                app = await self._coupon_svc.resolve(
+                    coupon_code, subtotal, ship, user_id
+                )
+                product_discount = app.product_discount
+                ship_discount = app.ship_discount
+                coupon_applied = True
+                applied_code = app.coupon.code
+
+            total = pricing.order_total(
+                subtotal, ship, product_discount, ship_discount
+            )
+            return {
+                "subtotal": round(subtotal, 2),
+                "shipping_fee": ship,
+                "product_discount": product_discount,
+                "ship_discount": ship_discount,
+                "total": total,
+                "coupon_applied": coupon_applied,
+                "coupon_code": applied_code,
+            }
+
     async def create_order(
         self, user_id: int, data: dict
     ) -> tuple[Order, list[OrderDetail]]:
@@ -135,16 +206,35 @@ class OrderService:
         if not cart_ids:
             raise AppException("E10505")
 
+        address_id = data.get("address_id")
+        if not address_id:
+            raise AppException("E10320")
+
+        payment_provider = data.get("payment_provider") or "cod"
+        if payment_provider not in ("cod", "mock_online"):
+            raise AppException("E10508")
+
+        coupon_code = data.get("coupon_code")
+
         async with self._transaction():
             cart_items = await self._cart_repo.find_by_ids(cart_ids)
             if not cart_items:
                 raise AppException("E10505")
 
+            # Snapshot địa chỉ giao + tọa độ lúc đặt (đổi sổ địa chỉ sau không ảnh hưởng đơn)
+            addr = await self._verify_address_owner(address_id, user_id)
+
             order = Order(
                 user_id=user_id,
-                address=data.get("address", ""),
+                address=addr.full_address(),
+                recipient_name=addr.recipient_name,
+                recipient_phone=addr.recipient_phone,
+                ship_lat=addr.lat,
+                ship_lng=addr.lng,
                 total_amount=0,
-                payment_method=data.get("paymentMethod") or data.get("payment_method", ""),
+                # payment_method giữ giá trị provider để cột cũ vẫn có dữ liệu hiển thị
+                payment_method=payment_provider,
+                payment_provider=payment_provider,
                 shipping_status="Đơn hàng đã được tạo",
                 payment_status=False,
             )
@@ -188,8 +278,31 @@ class OrderService:
                 # Xóa cart item
                 await self._cart_repo.delete(item)
 
-            order.total_amount = subtotal
+            # Phí ship + áp coupon (nối đầy đủ vào total_amount)
+            # Shipping fee + coupon (fully wired into total_amount)
+            ship = pricing.shipping_fee(subtotal)
+            product_discount = 0.0
+            ship_discount = 0.0
+            coupon_app = None
+            if coupon_code:
+                coupon_app = await self._coupon_svc.resolve(
+                    coupon_code, subtotal, ship, user_id
+                )
+                product_discount = coupon_app.product_discount
+                ship_discount = coupon_app.ship_discount
+                order.coupon_id = coupon_app.coupon.id
+
+            order.shipping_fee = ship
+            order.product_discount = product_discount
+            order.ship_discount = ship_discount
+            order.total_amount = pricing.order_total(
+                subtotal, ship, product_discount, ship_discount
+            )
             await self._order_repo.save(order)
+
+            # Tăng lượt dùng coupon trong cùng transaction (atomic với việc tạo đơn)
+            if coupon_app is not None:
+                await self._coupon_svc.increment_usage(coupon_app.coupon)
 
             return order, details
 
@@ -231,3 +344,60 @@ class OrderService:
             for detail in details:
                 await self._detail_repo.delete(detail)
             await self._order_repo.delete(order)
+
+    # ── Thanh toán giả lập (mock online gateway) ────────────────────────────────
+
+    async def start_payment(self, order_id: int, user_id: int) -> tuple[Order, str]:
+        """Bắt đầu thanh toán cổng online giả lập: sinh payment_ref cho đơn của user.
+        Lỗi: E10500 không thấy đơn, E2021 không phải chủ, E10507 đã thanh toán,
+        E10508 đơn không dùng cổng online (vd COD).
+        """
+        import uuid
+
+        async with self._transaction():
+            order = await self._order_repo.find(order_id)
+            if not order:
+                raise AppException("E10500")
+            if order.user_id != user_id:
+                raise AppException("E2021")
+            if order.payment_status:
+                raise AppException("E10507")
+            if order.payment_provider != "mock_online":
+                raise AppException("E10508")
+            ref = uuid.uuid4().hex
+            order.payment_ref = ref
+            await self._order_repo.save(order)
+            return order, ref
+
+    async def confirm_mock_payment(self, payment_ref: str, success: bool) -> Order:
+        """Callback giả lập: khớp payment_ref đang chờ -> set đã thanh toán nếu success.
+        Lỗi E10509 nếu ref không khớp hoặc đơn đã xử lý (đã thanh toán).
+        """
+        from datetime import datetime, timezone
+
+        async with self._transaction():
+            order = await self._order_repo.find_by_payment_ref(payment_ref)
+            if not order or order.payment_status:
+                raise AppException("E10509")
+            if success:
+                order.payment_status = True
+                order.paid_at = datetime.now(timezone.utc)
+                order.shipping_status = "Đã thanh toán, chờ giao"
+            await self._order_repo.save(order)
+            return order
+
+    # ── Cập nhật trạng thái giao hàng (admin) ───────────────────────────────────
+
+    async def update_shipping_status(
+        self, order_id: int, user, status: str
+    ) -> Order:
+        """Admin cập nhật trạng thái giao hàng. Cần quyền update_shipping_status."""
+        # authz mở transaction riêng -> gọi trước, ngoài transaction cập nhật
+        await self._authz.require(user, "update_shipping_status", target_id=order_id)
+        async with self._transaction():
+            order = await self._order_repo.find(order_id)
+            if not order:
+                raise AppException("E10500")
+            order.shipping_status = status
+            await self._order_repo.save(order)
+            return order

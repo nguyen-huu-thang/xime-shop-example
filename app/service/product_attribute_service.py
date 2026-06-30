@@ -49,6 +49,13 @@ class ProductAttributeService:
     async def find_by_product_id(self, product_id: int) -> list[ProductAttribute]:
         return await self._repo.find_by_product_id(product_id)
 
+    async def find_by_product_ids(
+        self, product_ids: set[int]
+    ) -> list[ProductAttribute]:
+        # Batch: ủy thác cho repo gom thuộc tính nhiều sản phẩm (chống N+1)
+        # Batch: delegate to repo to load attributes of many products (avoid N+1)
+        return await self._repo.find_by_product_ids(product_ids)
+
     async def find_by_name_and_product_id(
         self, name: str, product_id: int
     ) -> ProductAttribute | None:

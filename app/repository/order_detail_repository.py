@@ -40,3 +40,11 @@ class OrderDetailRepository(CrudRepository[OrderDetail]):
             select(OrderDetail).where(OrderDetail.order_id.in_(order_ids))
         )
         return list(result.scalars().all())
+
+    async def all_order_product_pairs(self) -> list[tuple[int, int]]:
+        # Mọi cặp (order_id, product_id) - nguồn tính đồng mua cho co-occurrence.
+        # All (order_id, product_id) pairs - source for co-purchase co-occurrence.
+        result = await self.session.execute(
+            select(OrderDetail.order_id, OrderDetail.product_id)
+        )
+        return [(int(oid), int(pid)) for oid, pid in result.all()]

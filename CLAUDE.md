@@ -59,6 +59,38 @@ controller/service/repository/entity, test pass. Các cải tiến đã làm sau
 - **Gỡ `ShopWebAdapter` tự viết** -> dùng API `configure_cors` / `configure_middleware` /
   `configure_exception_handlers` của Xime trong `app/config/web.py`; `main.py` chỉ còn `WebAdapter()`.
   Chi tiết wiring web layer: [`.claude/docs/go-web-adapter-dung-configure.md`](.claude/docs/go-web-adapter-dung-configure.md).
+- **Tối ưu N+1 Product/Variant:** index FK + UNIQUE (migration `c3e4a5b6d7f8`); batch query gỡ N+1
+  trong dựng DTO sản phẩm (`ProductService._to_dtos`) và `find_product_option_by_json`. Chi tiết:
+  [`.claude/docs/toi-uu-product-variant.md`](.claude/docs/toi-uu-product-variant.md).
+- **Cá nhân hóa người dùng (không AI):** kho sự kiện có trọng số (Action/Interaction) + affinity
+  category materialized decay-on-write + co-occurrence đồng mua. Endpoint `recently-viewed`/`trending`/
+  `for-you`/`products/{id}/related`. Migration `d4f5a6b7c8e9`..`f6a7b8c9d0e1`. Xime scheduler dựng lại
+  co-occurrence hằng ngày 03:00 (gate bỏ qua khi test); kèm endpoint admin thủ công. Chi tiết:
+  [`.claude/docs/ca-nhan-hoa-nguoi-dung.md`](.claude/docs/ca-nhan-hoa-nguoi-dung.md).
+- **Checkout (demo) - đã code, 135 test pass:** sổ địa chỉ `user_addresses` (+ tọa độ lat/lng),
+  coupon nâng cấp (loại %/số tiền + trần, đơn tối thiểu, scope SP/ship, giới hạn lượt dùng,
+  per_user_once), tính tiền + endpoint `POST /api/orders/preview`, tạo đơn theo `addressId` +
+  `couponCode` + `paymentProvider` (nối đầy đủ ship + coupon vào `total_amount`), thanh toán giả lập
+  (`POST /api/orders/{id}/pay` + `POST /api/payments/mock/callback`). Migration `a7b8c9d0e1f2`..
+  `d0e1f2a3b4c5`. Chi tiết: [`.claude/docs/thiet-ke-checkout.md`](.claude/docs/thiet-ke-checkout.md).
+- **Thông báo in-app - đã code:** hộp thư theo user (`/api/notifications/me`, `/me/unread-count`,
+  `/me/read-all`), vá IDOR `PATCH /{id}/read` (owner-only), helper `notify()` tự sinh khi đặt hàng /
+  thanh toán thành công / đổi trạng thái giao, admin broadcast (`POST /api/notifications/broadcast`).
+  Chi tiết: [`.claude/docs/thiet-ke-thong-bao.md`](.claude/docs/thiet-ke-thong-bao.md).
+- **Email - đã code (hạ tầng + giao dịch + bảo mật), 146 test pass:** bind `MailService: SmtpMailService`
+  (`xime.starters.mail`) + `mail.*` trong application.yml (host sẵn, **username/password chờ điền**
+  Gmail app password); `EmailService` tự TẮT khi chưa cấu hình; email xác nhận đơn + thanh toán (nền);
+  endpoint test admin `GET/POST /api/email/*`. **Email bảo mật**: bảng chung `auth_tokens` +
+  `AuthTokenService` (verify 24h/reset 30p/OTP 5p, lưu hash); xác minh email (`/api/verify-email`
+  [+resend], cột `users.email_verified`, hook khi register), quên/đặt lại mật khẩu (`/api/forgot-password`
+  + `/api/reset-password`, thu hồi mọi refresh token qua `refresh_tokens.user_id` - CHỈ khi reset),
+  OTP (`/api/otp/request` + `/api/otp/verify`, chưa wire vào login). Migration `e1f2a3b4c5d6`. Còn lại:
+  Phase B (kênh email cho notify). Chi tiết: [`.claude/docs/thiet-ke-email.md`](.claude/docs/thiet-ke-email.md).
+- **Rà soát & vá phân quyền (2026-06-30) - đã xong:** vá `search_controller` (users/groups cần quyền
+  admin; cart/orders cần đăng nhập), `review_controller` (create gán userId theo user đăng nhập;
+  update chỉ chủ sở hữu - vá IDOR; detail không lộ review chưa duyệt). `/media/{key}` giữ công khai
+  có chủ đích (ảnh sản phẩm). Test regression `test/test_security.py`. Chi tiết:
+  [`.claude/docs/audit-phan-quyen-2026-06-30.md`](.claude/docs/audit-phan-quyen-2026-06-30.md).
 
 
 ## framework issues

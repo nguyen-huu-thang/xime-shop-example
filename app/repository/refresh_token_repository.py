@@ -18,3 +18,12 @@ class RefreshTokenRepository(CrudRepository[RefreshToken]):
             delete(RefreshToken).where(RefreshToken.expires_at < datetime.now(UTC))
         )
         await self.session.flush()
+
+    async def delete_by_user_id(self, user_id: int) -> int:
+        # Thu hồi mọi refresh token của một user (đặt lại mật khẩu)
+        # Revoke all refresh tokens of a user (password reset)
+        result = await self.session.execute(
+            delete(RefreshToken).where(RefreshToken.user_id == user_id)
+        )
+        await self.session.flush()
+        return result.rowcount

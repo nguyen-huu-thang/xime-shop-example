@@ -15,6 +15,20 @@ class ProductOptionValueRepository(CrudRepository[ProductOptionValue]):
         )
         return list(result.scalars().all())
 
+    async def find_by_option_ids(
+        self, option_ids: set[int]
+    ) -> list[ProductOptionValue]:
+        # Batch load: gom liên kết option-value của nhiều option trong 1 query (chống N+1)
+        # Batch load option-value links of many options in one query (avoid N+1)
+        if not option_ids:
+            return []
+        result = await self.session.execute(
+            select(ProductOptionValue)
+            .where(ProductOptionValue.option_id.in_(option_ids))
+            .order_by(ProductOptionValue.id.asc())
+        )
+        return list(result.scalars().all())
+
     async def find_by_attribute_value_id(
         self, attribute_value_id: int
     ) -> list[ProductOptionValue]:

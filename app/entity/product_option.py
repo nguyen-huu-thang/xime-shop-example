@@ -11,7 +11,7 @@ class ProductOption(Base):
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     product_id: Mapped[int] = mapped_column(
-        BigInteger, ForeignKey("products.id"), nullable=False
+        BigInteger, ForeignKey("products.id"), nullable=False, index=True
     )
     # Một tổ hợp lựa chọn hoàn chỉnh = 1 SKU có giá + tồn kho
     price: Mapped[float | None] = mapped_column(Numeric(10, 2), nullable=True)

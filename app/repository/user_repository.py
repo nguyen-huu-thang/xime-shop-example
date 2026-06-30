@@ -21,6 +21,14 @@ class UserRepository(CrudRepository[User]):
         )
         return result.scalar_one_or_none()
 
+    async def all_active_ids(self) -> list[int]:
+        # Id mọi user đang hoạt động (phục vụ broadcast thông báo)
+        # Ids of all active users (for notification broadcast)
+        result = await self.session.execute(
+            select(User.id).where(User.is_active == True)  # noqa: E712
+        )
+        return [int(r) for r in result.scalars().all()]
+
     async def find_all_paginated(self, page: int, limit: int) -> list[User]:
         # Admin user management: list all users (active + inactive) so they can be
         # activated/deactivated, ordered by id.

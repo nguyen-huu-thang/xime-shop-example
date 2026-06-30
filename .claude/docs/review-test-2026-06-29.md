@@ -208,3 +208,40 @@ ghi/nhóm đầu tiên khớp**, nên một `allow` có thể che mất một `d
 - **M. Cache quyết định theo request - HOÃN có chủ đích:** framework chưa có hook clear request-scoped
   đáng tin (ContextVar riêng sẽ rò sang request sau -> rủi ro bảo mật). Phần nặng (effective perms)
   đã xử lý ở L. Chờ framework hỗ trợ. Xem Phase 4 trong `phan-quyen-nang-cap.md`.
+
+## Tối ưu N+1 Product/Variant (2026-06-30, phiên sau)
+
+Luồng đọc sản phẩm dựng N+1: `_to_dto` query thuộc tính/option theo từng sản phẩm, lặp qua cả
+trang (~70 query/trang với 10 sp x 2 thuộc tính x 3 variant); `GET /api/products` lại không cache.
+`find_product_option_by_json` cũng N+1 (mỗi option 1 query option_values).
+
+Đã xử lý (full suite **103 passed**, chi tiết [`toi-uu-product-variant.md`](toi-uu-product-variant.md)):
+
+- **Index + UNIQUE (migration `c3e4a5b6d7f8`):** index 5 cột FK của nhóm product/variant (Postgres
+  không tự tạo index FK) + UNIQUE `(product_id, name)` và `(option_id, attribute_value_id)` chặn rác.
+- **Batch query gỡ N+1:** thêm `find_by_*_ids` ở 4 repo/sub-service; `ProductService._to_dtos`
+  nạp tất cả bằng 4 query `WHERE ... IN (...)` rồi ráp DTO trong RAM (`_build_attributes`,
+  `_calc_price_stock`). List M sản phẩm: từ `M x (N+1)` xuống **~4 query cố định**. DTO không đổi.
+- **`find_product_option_by_json`:** batch option_values theo `option_ids`, so set trong RAM:
+  từ `1 + N_opt` xuống **2 query**.
+- **Test mới `test_product_dto_batch.py`:** khóa chống N+1 (mỗi batch method gọi đúng 1 lần dù nhiều
+  sản phẩm) + kiểm tra giá trị DTO mọi nhánh tính giá/tồn.
+- **Hoãn:** Phase 6 (cache trang list) - list đã ~4 query nên ưu tiên thấp. Backlog: thêm
+  `sku`/`barcode`/ảnh/`position` cho variant; tách "default option" khỏi bảng variant thật.
+
+## Cá nhân hóa người dùng - không AI (2026-06-30, phiên sau)
+
+Dựng cá nhân hóa từ 3 entity mồ côi (Action/Interaction/Wishlist) làm kho sự kiện có trọng số.
+Phase 1-5 xong (full suite **122 passed**), chi tiết [`ca-nhan-hoa-nguoi-dung.md`](ca-nhan-hoa-nguoi-dung.md):
+
+- **Nền:** `ActionRegistry` (cache RAM bảng điểm), seed 6 actions + quyền `manage_recommendations`.
+- **Ghi tín hiệu:** `InteractionService.record()` fault-tolerant + throttle tín hiệu yếu; gắn ở
+  view/add_to_cart/wishlist/purchase. FK interactions ON DELETE CASCADE (migration `d4f5a6b7c8e9`).
+- **Affinity:** bảng materialized `user_category_affinity` decay-on-write (half-life 30 ngày), nối vào record().
+- **Gợi ý:** `recently-viewed` / `trending` (cache, window 14 ngày) / `for-you` (affinity, cold-start -> trending).
+- **Mua cùng:** `product_cooccurrence` từ đồng mua (order_details); `GET /products/{id}/related`.
+- **Scheduler:** tự dựng lại co-occurrence hằng ngày 03:00 qua **Xime scheduler** (`apscheduler`
+  4.0.0a6 đã có; package `app.job` đã scan). **Gate bỏ qua khi pytest** (AsyncScheduler rò giữa các
+  TestApplication event loop) - chỉ chạy ở prod; đã smoke-test start/stop sạch. Manual:
+  `POST .../admin/rebuild-cooccurrence`.
+- **CÒN TỒN:** lệnh sửa chữa rebuild-affinity (Phase 6 tùy chọn) chưa làm.

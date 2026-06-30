@@ -6,7 +6,7 @@ from app.dto.request.review_request import ReviewCreateRequest, ReviewUpdateRequ
 from app.dto.response.review_response import ReviewResponse
 from app.dto.response.token_response import MessageResponse
 from app.exception.app_exception import AppException
-from app.security.current_user import require_login
+from app.security.current_user import current_user, require_login
 from app.service.authorization_service import AuthorizationService
 from app.service.review_service import ReviewService
 
@@ -43,19 +43,35 @@ class ReviewController:
     async def detail(self, id: int) -> ReviewResponse:
         review = await self._svc.get_review_by_id(id)
         if not review:
-            raise AppException("E10200")
+            raise AppException("E10600")
+        # Review chưa duyệt chỉ chủ sở hữu hoặc người có quyền view_reviews mới xem được
+        # (tránh lộ review chưa duyệt cho khách)
+        if not review.is_approved:
+            user = current_user()
+            await self._authz.require_owner_or_permission(
+                user, "view_reviews", review, target_id=id
+            )
         return ReviewResponse.model_validate(review)
 
     @post("", status_code=201)
     async def create(self, body: ReviewCreateRequest) -> ReviewResponse:
-        require_login()
+        user = require_login()
         data = body.model_dump(by_alias=True)
+        # Gán userId theo user đăng nhập (không tin userId từ client)
+        data["userId"] = user.id
         review = await self._svc.create_review(data)
         return ReviewResponse.model_validate(review)
 
     @put("/{id}")
     async def update(self, id: int, body: ReviewUpdateRequest) -> ReviewResponse:
-        require_login()
+        # Chỉ chủ sở hữu review (hoặc người có quyền delete_review = admin) mới sửa được (vá IDOR)
+        user = require_login()
+        review = await self._svc.get_review_by_id(id)
+        if not review:
+            raise AppException("E10600")
+        await self._authz.require_owner_or_permission(
+            user, "delete_review", review, target_id=id
+        )
         data = body.model_dump(exclude_unset=True)
         review = await self._svc.update_review(id, data)
         return ReviewResponse.model_validate(review)

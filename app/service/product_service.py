@@ -23,6 +23,7 @@ from app.entity.product import Product
 from app.entity.product_attribute import ProductAttribute
 from app.entity.product_attribute_value import ProductAttributeValue
 from app.entity.product_option import ProductOption
+from app.entity.product_option_value import ProductOptionValue
 from app.exception.app_exception import AppException
 from app.repository.category_repository import CategoryRepository
 from app.repository.product_repository import ProductRepository
@@ -87,12 +88,16 @@ class ProductService:
     # transaction do method đọc cấp trên mở (gom N+1 về một transaction duy nhất).
     # The _helpers below run inside a transaction opened by the calling read method.
 
-    async def _get_attributes_dict(self, product_id: int) -> dict[str, list[str]]:
-        """Return {attr_name: [value, ...]} for a product. Chạy trong transaction đang mở."""
-        attrs = await self._attr_svc.find_by_product_id(product_id)
+    @staticmethod
+    def _build_attributes(
+        attrs: list[ProductAttribute],
+        vals_by_attr: dict[int, list[ProductAttributeValue]],
+    ) -> dict[str, list[str]]:
+        """Return {attr_name: [value, ...]} từ map đã nạp sẵn (thuần RAM, 0 query).
+        Logic giống hệt _get_attributes_dict cũ, chỉ đọc từ map thay vì query từng attribute."""
         result: dict[str, list[str]] = {}
         for attr in attrs:
-            vals = await self._attr_val_svc.find_by_attribute_id(attr.id)
+            vals = vals_by_attr.get(attr.id, [])
             result[attr.name] = [v.value for v in vals]
         return result
 
@@ -109,9 +114,13 @@ class ProductService:
                 return opt
         return None
 
-    async def _get_price_and_stock(self, product_id: int) -> dict:
-        """Tính giá + tồn kho. Chạy trong transaction đang mở."""
-        options = await self._option_svc.find_by_product_id(product_id)
+    @staticmethod
+    def _calc_price_stock(
+        options: list[ProductOption],
+        optvals_by_option: dict[int, list[ProductOptionValue]],
+    ) -> dict:
+        """Tính giá + tồn kho từ map đã nạp sẵn (thuần RAM, 0 query).
+        Logic giống hệt _get_price_and_stock cũ."""
         if len(options) == 1:
             price = options[0].price
             return {
@@ -121,11 +130,9 @@ class ProductService:
 
         # Filter out default (no-value) option from price calculation
         # Bỏ option mặc định (không có value) khỏi tính giá
-        priced_options: list[ProductOption] = []
-        for opt in options:
-            vals = await self._option_val_svc.find_by_option_id(opt.id)
-            if vals:
-                priced_options.append(opt)
+        priced_options: list[ProductOption] = [
+            opt for opt in options if optvals_by_option.get(opt.id)
+        ]
 
         prices = [float(o.price) for o in priced_options if o.price is not None]
         total_stock = sum(o.stock for o in priced_options)
@@ -134,21 +141,69 @@ class ProductService:
             "stock": total_stock,
         }
 
+    async def _to_dtos(self, products: list[Product]) -> list[dict]:
+        """Serialize nhiều product trong MỘT lượt batch (chống N+1). Chạy trong transaction đang mở.
+
+        Thay vì query thuộc tính/option theo từng sản phẩm (N+1), nạp tất cả bằng 4 query
+        `WHERE ... IN (...)` rồi ráp DTO trong RAM. DTO trả ra giống hệt _to_dto từng-cái cũ.
+
+        Serialize many products in one batch (avoid N+1): four IN-queries then assemble in RAM.
+        """
+        if not products:
+            return []
+
+        product_ids = {p.id for p in products}
+
+        # 4 batch query: attributes -> values, options -> option_values
+        attrs = await self._attr_svc.find_by_product_ids(product_ids)
+        attr_ids = {a.id for a in attrs}
+        vals = await self._attr_val_svc.find_by_attribute_ids(attr_ids)
+        options = await self._option_svc.find_by_product_ids(product_ids)
+        option_ids = {o.id for o in options}
+        optvals = await self._option_val_svc.find_by_option_ids(option_ids)
+
+        # Gom theo khóa cha để tra trong RAM
+        # Group by parent key for in-memory lookup
+        attrs_by_product: dict[int, list[ProductAttribute]] = {}
+        for a in attrs:
+            attrs_by_product.setdefault(a.product_id, []).append(a)
+        vals_by_attr: dict[int, list[ProductAttributeValue]] = {}
+        for v in vals:
+            vals_by_attr.setdefault(v.attribute_id, []).append(v)
+        opts_by_product: dict[int, list[ProductOption]] = {}
+        for o in options:
+            opts_by_product.setdefault(o.product_id, []).append(o)
+        optvals_by_option: dict[int, list[ProductOptionValue]] = {}
+        for ov in optvals:
+            optvals_by_option.setdefault(ov.option_id, []).append(ov)
+
+        result: list[dict] = []
+        for product in products:
+            attributes = self._build_attributes(
+                attrs_by_product.get(product.id, []), vals_by_attr
+            )
+            price_stock = self._calc_price_stock(
+                opts_by_product.get(product.id, []), optvals_by_option
+            )
+            result.append(
+                {
+                    "id": product.id,
+                    "name": product.name,
+                    "locationAddress": product.location_address,
+                    "categoryId": product.category_id,
+                    "description": product.description,
+                    "price": price_stock["prices"],
+                    "stock": price_stock["stock"],
+                    "attribute": attributes,
+                    "discountPercentage": product.discount_percentage,
+                }
+            )
+        return result
+
     async def _to_dto(self, product: Product) -> dict:
-        """Serialize product to dict. Chạy trong transaction đang mở (không tự mở)."""
-        attributes = await self._get_attributes_dict(product.id)
-        price_stock = await self._get_price_and_stock(product.id)
-        return {
-            "id": product.id,
-            "name": product.name,
-            "locationAddress": product.location_address,
-            "categoryId": product.category_id,
-            "description": product.description,
-            "price": price_stock["prices"],
-            "stock": price_stock["stock"],
-            "attribute": attributes,
-            "discountPercentage": product.discount_percentage,
-        }
+        """Serialize một product. Ủy thác cho _to_dtos để dùng chung logic (tránh lệch)."""
+        dtos = await self._to_dtos([product])
+        return dtos[0]
 
     async def to_dto(self, product: Product) -> dict:
         """Serialize product to dict trong MỘT transaction (dùng sau các write method)."""
@@ -163,7 +218,7 @@ class ProductService:
             return cached
         async with self._transaction():
             products = await self._product_repo.find_all()
-            result = [await self._to_dto(p) for p in products if not p.is_delete]
+            result = await self._to_dtos([p for p in products if not p.is_delete])
         await self._cache_set_json(self._CACHE_ALL, result)
         return result
 
@@ -176,7 +231,7 @@ class ProductService:
     async def get_paginated_product_dtos(self, page: int, limit: int) -> list[dict]:
         async with self._transaction():
             products = await self._product_repo.find_all_paginated(page, limit)
-            return [await self._to_dto(p) for p in products]
+            return await self._to_dtos(products)
 
     async def get_managed_product_dtos(
         self, allowed_category_ids: set[int] | None, page: int, limit: int
@@ -190,7 +245,7 @@ class ProductService:
                 products = await self._product_repo.find_paginated_in_categories(
                     allowed_category_ids, page, limit
                 )
-            return [await self._to_dto(p) for p in products]
+            return await self._to_dtos(products)
 
     async def count_managed_products(self, allowed_category_ids: set[int] | None) -> int:
         async with self._transaction():
@@ -222,15 +277,26 @@ class ProductService:
         async with self._transaction():
             return await self._product_repo.find_by_category_id(category_id)
 
+    async def get_product_dtos_by_ids(self, ordered_ids: list[int]) -> list[dict]:
+        """Dựng DTO cho danh sách product_id, GIỮ NGUYÊN thứ tự truyền vào, bỏ id không tồn tại/đã xóa.
+        Dùng cho gợi ý (đã xem gần đây / thịnh hành / for-you) - đã batch nên không N+1."""
+        if not ordered_ids:
+            return []
+        async with self._transaction():
+            products = await self._product_repo.find_by_ids(set(ordered_ids))
+            dtos = await self._to_dtos(products)
+        by_id = {d["id"]: d for d in dtos}
+        return [by_id[i] for i in ordered_ids if i in by_id]
+
     async def get_products_by_category_id(self, category_id: int) -> list[dict]:
         async with self._transaction():
             products = await self._product_repo.find_by_category_id(category_id)
-            return [await self._to_dto(p) for p in products if not p.is_delete]
+            return await self._to_dtos([p for p in products if not p.is_delete])
 
     async def search_products_by_keywords(self, keywords: str) -> list[dict]:
         async with self._transaction():
             products = await self._product_repo.search_by_keywords(keywords)
-            return [await self._to_dto(p) for p in products]
+            return await self._to_dtos(products)
 
     async def get_option_default(self, product: Product) -> dict:
         async with self._transaction():
@@ -520,9 +586,18 @@ class ProductService:
 
             target = set(pav_ids)
             options = await self._option_svc.find_by_product_id(product.id)
+            # Batch nạp toàn bộ option_values của các option trong 1 query (chống N+1),
+            # gom theo option rồi so set trong RAM thay vì query từng option.
+            # Batch load all option_values in one query then compare sets in RAM.
+            option_ids = {o.id for o in options}
+            optvals = await self._option_val_svc.find_by_option_ids(option_ids)
+            vals_by_option: dict[int, set[int]] = {}
+            for ov in optvals:
+                vals_by_option.setdefault(ov.option_id, set()).add(
+                    ov.attribute_value_id
+                )
             for opt in options:
-                opt_vals = await self._option_val_svc.find_by_option_id(opt.id)
-                if {ov.attribute_value_id for ov in opt_vals} == target:
+                if vals_by_option.get(opt.id, set()) == target:
                     return opt
 
         raise AppException("E10204")

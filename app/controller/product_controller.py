@@ -11,9 +11,11 @@ from app.dto.request.product_request import (
 )
 from app.dto.response.token_response import CountResponse, MessageResponse
 from app.exception.app_exception import AppException
-from app.security.current_user import require_login
+from app.security.current_user import current_user, require_login
 from app.service.authorization_service import AuthorizationService
+from app.service.interaction_service import InteractionService
 from app.service.product_service import ProductService
+from app.service.recommendation_service import RecommendationService
 
 
 class ProductController:
@@ -24,9 +26,13 @@ class ProductController:
         self,
         product_service: ProductService,
         authorization_service: AuthorizationService,
+        interaction_service: InteractionService,
+        recommendation_service: RecommendationService,
     ) -> None:
         self._svc = product_service
         self._authz = authorization_service
+        self._interaction = interaction_service
+        self._recommendation = recommendation_service
 
     @get("")
     async def list(self, page: int = 1, limit: int = 10) -> list[dict]:
@@ -53,6 +59,12 @@ class ProductController:
         allowed = await self._authz.allowed_category_scope(user, "view_products")
         return CountResponse(total=await self._svc.count_managed_products(allowed))
 
+    @get("/{id}/related")
+    async def related(self, id: int, limit: int = 10) -> list[dict]:
+        # Sản phẩm hay được mua cùng (co-occurrence, công khai). Rỗng nếu chưa dựng bảng.
+        # Frequently bought together (public). Empty until the table is built.
+        return await self._recommendation.related(id, limit)
+
     @get("/by-category/{category_id}")
     async def by_category(self, category_id: int) -> list[dict]:
         products = await self._svc.get_products_by_category_id(category_id)
@@ -69,7 +81,13 @@ class ProductController:
 
     @get("/{id}")
     async def detail(self, id: int) -> dict:
-        return await self._svc.get_product_dto_by_id(id)
+        dto = await self._svc.get_product_dto_by_id(id)
+        # Ghi tín hiệu "view" cho cá nhân hóa - chỉ khi đã đăng nhập, fault-tolerant (throttle)
+        # Record a "view" signal for personalization - only if logged in, fault-tolerant
+        user = current_user()
+        if user is not None:
+            await self._interaction.record(user.id, id, "view")
+        return dto
 
     @get("/{id}/option-default")
     async def get_option_default(self, id: int) -> dict:

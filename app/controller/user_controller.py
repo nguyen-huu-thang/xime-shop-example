@@ -19,7 +19,10 @@ Quản trị (theo quyền):
 """
 from __future__ import annotations
 
+import logging
+
 from xime.adapters.web.routing import delete, get, patch, post, put
+from xime.starters.mail import MailError
 
 from app.dto.request.user_request import (
     ActiveStatusRequest,
@@ -32,8 +35,12 @@ from app.dto.response.token_response import CountResponse, MessageResponse
 from app.dto.response.user_response import UserResponse
 from app.exception.app_exception import AppException
 from app.security.current_user import require_login
+from app.service.auth_token_service import AuthTokenService
 from app.service.authorization_service import AuthorizationService
+from app.service.email_service import EmailService
 from app.service.user_service import UserService
+
+logger = logging.getLogger(__name__)
 
 
 class UserController:
@@ -44,9 +51,13 @@ class UserController:
         self,
         user_service: UserService,
         authorization_service: AuthorizationService,
+        auth_token_service: AuthTokenService,
+        email_service: EmailService,
     ) -> None:
         self._user_svc = user_service
         self._authz = authorization_service
+        self._tokens = auth_token_service
+        self._email = email_service
 
     # ── Public: registration ─────────────────────────────────────────────────
 
@@ -54,7 +65,13 @@ class UserController:
     async def register(self, body: RegisterRequest) -> MessageResponse:
         # Public self-registration; client redirects to /login afterwards.
         # Tự đăng ký công khai; client tự chuyển sang /login sau khi tạo.
-        await self._user_svc.create_user(body.model_dump())
+        user = await self._user_svc.create_user(body.model_dump())
+        # Gửi email xác minh (không bắt buộc - đăng ký vẫn thành công nếu email lỗi/chưa cấu hình)
+        try:
+            token = await self._tokens.create_verify_email(user.id)
+            await self._email.send_verify_email(user.email, token)
+        except MailError:
+            logger.info("Bỏ qua gửi email xác minh (SMTP chưa cấu hình hoặc lỗi) cho %s", user.email)
         return MessageResponse(message="Đăng ký thành công. Vui lòng đăng nhập.")
 
     # ── Self-service profile ─────────────────────────────────────────────────

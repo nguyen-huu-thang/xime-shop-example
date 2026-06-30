@@ -11,6 +11,13 @@ class NotificationResponse(BaseModel):
     title: str
     message: str | None = None
     type: str
+    link: str | None = None
     is_read: bool
     created_at: datetime
     read_at: datetime | None = None
+
+
+class UnreadCountResponse(BaseModel):
+    """Số thông báo chưa đọc của user hiện tại (cho badge chuông)."""
+
+    count: int

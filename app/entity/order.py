@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from sqlalchemy import BigInteger, Boolean, ForeignKey, Numeric, String
+from datetime import datetime
+
+from sqlalchemy import BigInteger, Boolean, DateTime, ForeignKey, Numeric, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from xime.starters.sqlalchemy import Base, TimestampMixin
@@ -37,4 +39,23 @@ class Order(TimestampMixin, Base):
     # coupon_id nullable - bổ sung theo QĐ-2 để liên kết coupon ↔ order
     coupon_id: Mapped[int | None] = mapped_column(
         BigInteger, ForeignKey("coupons.id"), nullable=True
+    )
+
+    # ── Snapshot địa chỉ giao + tọa độ (checkout) ───────────────────────────────
+    # Chốt tại thời điểm đặt; sửa/xóa sổ địa chỉ không ảnh hưởng đơn đã tạo.
+    recipient_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    recipient_phone: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    ship_lat: Mapped[float | None] = mapped_column(Numeric(10, 7), nullable=True)
+    ship_lng: Mapped[float | None] = mapped_column(Numeric(10, 7), nullable=True)
+
+    # ── Thanh toán giả lập (checkout) ───────────────────────────────────────────
+    # payment_provider: 'cod' | 'mock_online'
+    payment_provider: Mapped[str] = mapped_column(
+        String(20), default="cod", server_default="cod", nullable=False
+    )
+    # Mã giao dịch giả lập (uuid) cho cổng online; null với COD
+    payment_ref: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    # Thời điểm "thanh toán" thành công
+    paid_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
     )

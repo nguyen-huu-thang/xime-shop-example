@@ -21,13 +21,20 @@ class RefreshTokenService:
         self._transaction = transaction
         self._repo = refresh_token_repository
 
-    async def create_token(self, jti: str, expires_at: datetime) -> RefreshToken:
-        """Save refresh token id + expiry to DB.
-        Lưu id của refresh token + hạn dùng vào DB.
+    async def create_token(
+        self, jti: str, expires_at: datetime, user_id: int | None = None
+    ) -> RefreshToken:
+        """Save refresh token id + expiry (+ owner) to DB.
+        Lưu id của refresh token + hạn + chủ sở hữu vào DB.
         """
         async with self._transaction():
-            token = RefreshToken(id=jti, expires_at=expires_at)
+            token = RefreshToken(id=jti, expires_at=expires_at, user_id=user_id)
             return await self._repo.save(token)
+
+    async def delete_by_user(self, user_id: int) -> int:
+        """Thu hồi MỌI refresh token của user (gọi khi đặt lại mật khẩu qua quên mật khẩu)."""
+        async with self._transaction():
+            return await self._repo.delete_by_user_id(user_id)
 
     async def get_token_by_id(self, jti: str) -> RefreshToken | None:
         """Look up a refresh token by jti.

@@ -58,6 +58,9 @@ ERROR_CODES: dict[str, ErrorDef] = {
     "E1022": ErrorDef(1022, "Không có quyền truy cập", 403),
     "E1023": ErrorDef(1023, "Không thể xác thực", 401),
     "E1024": ErrorDef(1024, "Mật khẩu hiện tại không chính xác", 401),
+    "E1025": ErrorDef(1025, "Liên kết không hợp lệ hoặc đã hết hạn", 400),
+    "E1026": ErrorDef(1026, "Mã OTP không đúng hoặc đã hết hạn", 400),
+    "E1027": ErrorDef(1027, "Không gửi được email, thử lại sau", 502),
     "E1030": ErrorDef(1030, "Lỗi máy chủ nội bộ", 500),
     "E1031": ErrorDef(1031, "Không thể kết nối cơ sở dữ liệu", 500),
     "E1032": ErrorDef(1032, "Thao tác không thành công", 500),
@@ -182,10 +185,20 @@ ERROR_CODES: dict[str, ErrorDef] = {
     # Danh mục (E10310-E10319) - không có trong PHP gốc, thêm cho kiến trúc đa lớp
     "E10310": ErrorDef(10310, "Không tìm thấy danh mục", 404),
     "E10311": ErrorDef(10311, "Tên danh mục là bắt buộc", 400),
+    # Sổ địa chỉ giao hàng (E10320-E10329) - bổ sung cho checkout
+    "E10320": ErrorDef(10320, "Không tìm thấy địa chỉ giao hàng", 404),
+    "E10321": ErrorDef(10321, "Địa chỉ giao hàng không hợp lệ", 400),
+    # Thông báo (E10330-E10339) - hộp thư người dùng
+    "E10330": ErrorDef(10330, "Không tìm thấy thông báo", 404),
+    "E10331": ErrorDef(10331, "Không có quyền với thông báo này", 403),
     "E10400": ErrorDef(10400, "Phiếu giảm giá không tồn tại", 404),
     "E10401": ErrorDef(10401, "Phiếu giảm giá đã hết hạn", 400),
     "E10402": ErrorDef(10402, "Phiếu giảm giá không hợp lệ", 400),
     "E10403": ErrorDef(10403, "Không thể áp dụng phiếu giảm giá", 500),
+    # Nâng cấp coupon (E10404-E10406)
+    "E10404": ErrorDef(10404, "Đơn hàng chưa đạt giá trị tối thiểu để dùng mã", 400),
+    "E10405": ErrorDef(10405, "Mã giảm giá đã hết lượt sử dụng", 400),
+    "E10406": ErrorDef(10406, "Bạn đã sử dụng mã giảm giá này", 400),
     "E10500": ErrorDef(10500, "Không tìm thấy đơn hàng", 404),
     "E10501": ErrorDef(10501, "Không thể tạo đơn hàng", 500),
     "E10502": ErrorDef(10502, "Chi tiết đơn hàng không hợp lệ", 400),
@@ -193,6 +206,10 @@ ERROR_CODES: dict[str, ErrorDef] = {
     "E10504": ErrorDef(10504, "Không thể xác nhận thanh toán cho đơn hàng", 500),
     "E10505": ErrorDef(10505, "Giỏ hàng trống hoặc không hợp lệ", 400),
     "E10506": ErrorDef(10506, "Số lượng vượt tồn kho", 400),
+    # Thanh toán giả lập (E10507-E10509)
+    "E10507": ErrorDef(10507, "Đơn hàng đã được thanh toán", 400),
+    "E10508": ErrorDef(10508, "Phương thức thanh toán không hợp lệ", 400),
+    "E10509": ErrorDef(10509, "Giao dịch thanh toán không hợp lệ hoặc đã xử lý", 400),
     "E10600": ErrorDef(10600, "Không tìm thấy đánh giá", 404),
     "E10601": ErrorDef(10601, "Người dùng không thể đánh giá sản phẩm này", 403),
     "E10602": ErrorDef(10602, "Đánh giá không hợp lệ", 400),

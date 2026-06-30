@@ -335,10 +335,26 @@ async def test_6_11_cart_order_flow():
         assert any(i["id"] == cart_id for i in cart_items)
         print(f"[6.11] ✓ Cart: {len(cart_items)} item(s)")
 
+        # Tạo địa chỉ giao (sổ địa chỉ) rồi đặt hàng theo addressId
+        resp = await client.post(
+            "/api/addresses",
+            json={
+                "recipientName": "Người Nhận",
+                "recipientPhone": "0900000000",
+                "province": "Hà Nội",
+                "district": "Cầu Giấy",
+                "ward": "Dịch Vọng",
+                "detail": "123 Đường Test",
+            },
+            headers=headers,
+        )
+        assert resp.status_code == 201, f"Create address: {resp.text}"
+        address_id = resp.json()["id"]
+
         # Đặt hàng
         resp = await client.post(
             "/api/orders",
-            json={"cartIds": [cart_id], "address": "123 Đường Test, Hà Nội"},
+            json={"cartIds": [cart_id], "addressId": address_id},
             headers=headers,
         )
         assert resp.status_code == 201, f"Create order: {resp.text}"
@@ -366,6 +382,7 @@ async def test_6_11_cart_order_flow():
         assert resp.status_code == 200
 
         # Cleanup
+        await client.delete(f"/api/addresses/{address_id}", headers=headers)
         await client.delete(f"/api/products/{prod_id}", headers=headers)
         await client.delete(f"/api/categories/{cat_id}", headers=headers)
     print("[6.11] ✓ Cart+Order end-to-end hoàn tất")

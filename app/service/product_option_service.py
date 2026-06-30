@@ -49,6 +49,11 @@ class ProductOptionService:
     async def find_by_product_id(self, product_id: int) -> list[ProductOption]:
         return await self._repo.find_by_product_id(product_id)
 
+    async def find_by_product_ids(self, product_ids: set[int]) -> list[ProductOption]:
+        # Batch: ủy thác cho repo gom option nhiều sản phẩm (chống N+1)
+        # Batch: delegate to repo to load options of many products (avoid N+1)
+        return await self._repo.find_by_product_ids(product_ids)
+
     async def delete_product_option(self, option_id: int) -> None:
         opt = await self._repo.find(option_id)
         if not opt:

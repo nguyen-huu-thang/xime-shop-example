@@ -79,7 +79,7 @@ class AuthenticationService:
         token_str: str = pyjwt.encode(payload, self._secret, algorithm="HS256")
 
         if token_type == "refresh":
-            await self._refresh_svc.create_token(jti, expires_at)
+            await self._refresh_svc.create_token(jti, expires_at, user.id)
 
         return token_str
 

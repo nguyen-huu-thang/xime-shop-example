@@ -19,6 +19,7 @@ from xime import Application
 from xime.starters.sqlalchemy import SqlAlchemyTransactionManager
 from xime.starters.sqlalchemy.session import AsyncSessionFactory
 
+from app.entity.action import Action
 from app.entity.group import Group
 from app.entity.group_member import GroupMember
 from app.entity.group_permission import GroupPermission
@@ -100,6 +101,20 @@ PERMISSIONS: dict[str, str] = {
     "access_admin_dashboard": "Truy cập Dashboard quản trị",
     "manage_system_settings": "Quản lý cấu hình hệ thống",
     "view_system_logs": "Quản lý nhật ký hệ thống",
+    # Cá nhân hóa / gợi ý
+    "manage_recommendations": "Quản lý cá nhân hóa (dựng lại affinity / co-occurrence)",
+}
+
+# Loại hành động cho cá nhân hóa (name → (mô tả, score)).
+# Score = trọng số tín hiệu ngầm: mua > đánh giá > thêm giỏ > yêu thích > xem.
+# Action types for personalization; score = implicit-feedback weight.
+ACTIONS: dict[str, tuple[str, int]] = {
+    "view": ("Xem chi tiết sản phẩm", 1),
+    "search_click": ("Bấm vào kết quả tìm kiếm", 1),
+    "wishlist": ("Thêm vào danh sách yêu thích", 4),
+    "add_to_cart": ("Thêm vào giỏ hàng", 5),
+    "review": ("Viết đánh giá", 8),
+    "purchase": ("Mua sản phẩm", 10),
 }
 
 # Quyền scope theo nhánh category (target_id = category, áp cho cả subtree).
@@ -209,6 +224,27 @@ async def seed() -> None:
             await session.flush()
             print(f"ListTable: +{lt_added} mới, tổng {len(_TABLE_DESCRIPTIONS)}.")
 
+            # 4b. Seed actions (loại hành động + score) cho cá nhân hóa - idempotent
+            # Seed action types + scores for personalization (idempotent, sync score)
+            existing_actions = {
+                a.name: a
+                for a in (await session.execute(select(Action))).scalars().all()
+            }
+            act_added = 0
+            act_synced = 0
+            for name, (desc, score) in ACTIONS.items():
+                action = existing_actions.get(name)
+                if action is None:
+                    session.add(Action(name=name, description=desc, score=score))
+                    act_added += 1
+                elif action.score != score:
+                    # Idempotent: đồng bộ score nếu bảng điểm đổi
+                    # Idempotent: sync score if the scoring table changed
+                    action.score = score
+                    act_synced += 1
+            await session.flush()
+            print(f"Actions: +{act_added} mới, đồng bộ score {act_synced}, tổng {len(ACTIONS)}.")
+
             # 5. Tài khoản admin đầu tiên (username=admin, password=Admin@123)
             # Tài khoản này chỉ dùng để bắt đầu - đổi mật khẩu ngay sau khi seed
             # First admin account (change password immediately after seeding)
@@ -226,6 +262,7 @@ async def seed() -> None:
                     password=hashed,
                     is_active=True,
                     is_superadmin=True,
+                    email_verified=True,
                 )
                 session.add(admin_user)
                 await session.flush()

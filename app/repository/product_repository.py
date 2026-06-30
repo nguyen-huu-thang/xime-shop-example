@@ -23,6 +23,18 @@ class ProductRepository(CrudRepository[Product]):
         )
         return list(result.scalars().all())
 
+    async def find_by_ids(self, product_ids: set[int]) -> list[Product]:
+        # Lấy sản phẩm chưa xóa theo tập id (cho gợi ý dựng DTO theo id).
+        # Fetch non-deleted products by id set (for building recommendation DTOs).
+        if not product_ids:
+            return []
+        result = await self.session.execute(
+            select(Product)
+            .where(Product.id.in_(product_ids))
+            .where(Product.is_delete.is_(False))
+        )
+        return list(result.scalars().all())
+
     async def find_all_paginated(self, page: int, limit: int) -> list[Product]:
         # Only return non-deleted products
         # Chỉ trả về sản phẩm chưa bị xóa mềm

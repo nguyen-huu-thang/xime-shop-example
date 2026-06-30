@@ -35,8 +35,9 @@
 |---|---|---|
 | `cart` | user_id, product_option_id, quantity, created_at | Giỏ hàng (theo option, không theo product) |
 | `wishlist` | user_id, product_option_id, created_at | Danh sách yêu thích |
-| `coupons` | code(unique), discount, start_date, end_date, is_active | Mã giảm giá |
-| `orders` | user_id, total_amount, payment_method, address, shipping_status, payment_status (**bool**), shipping_fee, product_discount, ship_discount, coupon_id (nullable), created_at, updated_at | `total_amount` chốt tại thời điểm đặt (snapshot, không tính lại) |
+| `user_addresses` | user_id, recipient_name, recipient_phone, province, district, ward, detail, lat, lng, is_default, created_at, updated_at | **Sổ địa chỉ giao hàng** (checkout). Tọa độ lat/lng (nullable) để hiển thị bản đồ; tối đa 1 is_default/user. Cascade khi xóa user. Xem [`thiet-ke-checkout.md`](thiet-ke-checkout.md) |
+| `coupons` | code(unique), discount, start_date, end_date, is_active, **discount_type**(fixed/percent), **max_discount**(nullable), **min_order_amount**, **applies_to**(product/shipping), **usage_limit**(nullable), **used_count**, **per_user_once** | Mã giảm giá - đã nâng cấp (loại %/số tiền + trần, đơn tối thiểu, scope SP/ship, giới hạn lượt dùng) |
+| `orders` | user_id, total_amount, payment_method, address, shipping_status, payment_status (**bool**), shipping_fee, product_discount, ship_discount, coupon_id (nullable), **recipient_name/recipient_phone/ship_lat/ship_lng** (snapshot địa chỉ giao), **payment_provider**(cod/mock_online), **payment_ref**(nullable), **paid_at**(nullable), created_at, updated_at | `total_amount` chốt tại thời điểm đặt = subtotal + shipping_fee - product_discount - ship_discount. Snapshot địa chỉ + tọa độ giao lúc đặt. |
 | `order_details` | order_id, product_option_id, quantity, price | Chi tiết từng dòng hàng trong đơn |
 
 > **Tồn kho:** số tồn hiện tại = stock − số đã đặt; hủy đơn thì cộng lại. Không có hệ thống kho riêng.
@@ -48,7 +49,7 @@
 | Bảng | Cột chính | Ghi chú |
 |---|---|---|
 | `reviews` | product_id, user_id, rating, comment, is_approved, created_at | Đánh giá, cần duyệt |
-| `notifications` | user_id, title, message, type(email/sms/push), is_read, created_at | Lịch sử thông báo |
+| `notifications` | user_id, title, message, type(email/sms/push), **link**(nullable), is_read, read_at, created_at | Hộp thư thông báo theo user; `link` để FE bấm điều hướng (vd /orders/12). Xem [`thiet-ke-thong-bao.md`](thiet-ke-thong-bao.md) |
 | `interactions` | user_id, product_id, action_id, created_at | Lịch sử tương tác (gợi ý SP) |
 | `actions` | name(unique), description, score | Loại hành động + điểm |
 
@@ -59,8 +60,9 @@
 |---|---|---|---|
 | `files` | id | user_id, file_name, file_path, file_size, sort, uploaded_at, is_active, list_tables→list_tables, description | Quan hệ đa hình qua `list_tables` |
 | `list_tables` | table_name (pk) | description | Liệt kê tên bảng — phục vụ quan hệ đa hình của `files` |
-| `refresh_tokens` | id (varchar 64) | expires_at | Chỉ lưu **id** token + hạn để dọn dẹp |
+| `refresh_tokens` | id (varchar 64) | expires_at, **user_id** (nullable, FK users) | Lưu id token + hạn + chủ sở hữu; `user_id` để thu hồi mọi phiên khi reset mật khẩu |
 | `blacklist_tokens` | id (varchar 64) | expires_at | id access token đã logout (thu hồi) |
+| `auth_tokens` | id (bigint) | user_id (FK users), type(verify_email/reset_password/otp), token_hash(SHA-256), expires_at, used_at, attempts, created_at | Token/mã dùng một lần cho email bảo mật (1 bảng chung). Xem [`thiet-ke-email.md`](thiet-ke-email.md) |
 
 > **File storage:** tên file = 32 ký tự ngẫu nhiên, lưu tại
 > `/public/data/{2 ký tự đầu}/{2 ký tự tiếp}/{phần còn lại}`. Đổi tên để giảm rủi ro bảo mật

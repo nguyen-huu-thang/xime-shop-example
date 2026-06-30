@@ -29,6 +29,11 @@ class UserService:
         async with self._transaction():
             return await self._user_repo.find(user_id)
 
+    async def get_all_active_user_ids(self) -> list[int]:
+        """Id mọi user đang hoạt động (phục vụ broadcast thông báo)."""
+        async with self._transaction():
+            return await self._user_repo.all_active_ids()
+
     async def verify_user_password(self, username: str, password: str) -> User:
         """Return active user if credentials are valid.
         Trả về user đang hoạt động nếu thông tin đăng nhập hợp lệ.
@@ -58,6 +63,28 @@ class UserService:
             raise AppException("E1024")
         async with self._transaction():
             db_user = await self._user_repo.find(user.id)
+            if not db_user:
+                raise AppException("E1004")
+            db_user.password = _crypt.hash(new_password)
+            await self._user_repo.save(db_user)
+
+    async def get_user_by_email(self, email: str) -> User | None:
+        async with self._transaction():
+            return await self._user_repo.find_by_email(email)
+
+    async def mark_email_verified(self, user_id: int) -> None:
+        """Đánh dấu email đã xác minh (luồng verify_email)."""
+        async with self._transaction():
+            db_user = await self._user_repo.find(user_id)
+            if not db_user:
+                raise AppException("E1004")
+            db_user.email_verified = True
+            await self._user_repo.save(db_user)
+
+    async def set_password(self, user_id: int, new_password: str) -> None:
+        """Đặt lại mật khẩu KHÔNG cần mật khẩu cũ (luồng quên/đặt lại mật khẩu)."""
+        async with self._transaction():
+            db_user = await self._user_repo.find(user_id)
             if not db_user:
                 raise AppException("E1004")
             db_user.password = _crypt.hash(new_password)

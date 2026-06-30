@@ -11,7 +11,7 @@ class ProductAttributeValue(Base):
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     attribute_id: Mapped[int] = mapped_column(
-        BigInteger, ForeignKey("product_attributes.id"), nullable=False
+        BigInteger, ForeignKey("product_attributes.id"), nullable=False, index=True
     )
     # Giá trị cụ thể: 40, 41, đỏ, xanh...
     value: Mapped[str] = mapped_column(String(50), nullable=False)

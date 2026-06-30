@@ -31,6 +31,38 @@ class OrderDetailResponse(BaseModel):
         )
 
 
+class OrderPreviewResponse(BaseModel):
+    """Breakdown tiền checkout cho FE (không tạo đơn)."""
+
+    subtotal: float
+    shippingFee: float
+    productDiscount: float
+    shipDiscount: float
+    total: float
+    couponApplied: bool
+    couponCode: str | None = None
+
+    @classmethod
+    def from_dict(cls, d: dict) -> "OrderPreviewResponse":
+        return cls(
+            subtotal=d["subtotal"],
+            shippingFee=d["shipping_fee"],
+            productDiscount=d["product_discount"],
+            shipDiscount=d["ship_discount"],
+            total=d["total"],
+            couponApplied=d["coupon_applied"],
+            couponCode=d["coupon_code"],
+        )
+
+
+class PaymentInitResponse(BaseModel):
+    """Khởi tạo thanh toán cổng online giả lập: trả mã giao dịch + URL trang mock."""
+
+    orderId: int
+    paymentRef: str
+    mockUrl: str
+
+
 class OrderResponse(BaseModel):
     id: int
     userId: int

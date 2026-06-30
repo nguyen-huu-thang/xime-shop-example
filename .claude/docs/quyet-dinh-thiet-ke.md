@@ -103,6 +103,49 @@ hierarchy danh mục: lặp `get(parent_id)` cho tới khi null).
 
 ---
 
+## QĐ-5: Kiểu scope của quyền — đặt ở **cột DB** `permissions.scope_type`
+
+**Vấn đề:** Khi nâng cấp phân quyền cho phép scope theo **nhánh category** (cấp quyền ở category cha
+phủ cả subtree), cần biết một quyền diễn giải `target_id` theo kiểu nào: "đúng một đối tượng"
+(instance-level cũ) hay "cả nhánh category". Lựa chọn: hardcode danh sách quyền category trong code,
+hay lưu thành dữ liệu.
+
+**Quyết định:** Lưu thành **cột DB** `permissions.scope_type` (String(20), **nullable**).
+- `null` = giữ hành vi cũ: `target_id` khớp **chính xác** đối tượng (instance-level / wildcard theo id).
+- `'category'` = `target_id` là id category; khi kiểm tra sẽ dựng **chuỗi tổ tiên** của category resource,
+  cấp ở cha áp cho cả subtree; deny ở nhánh con chỉ chặn đúng nhánh đó.
+
+**Lý do:** (1) Đổi/thêm quyền category-scope chỉ cần sửa dữ liệu seed, không sửa code. (2) Tương thích
+ngược tuyệt đối: quyền cũ `scope_type=null` chạy y như trước - đó là lý do 70 test cũ không vỡ.
+(3) Mở rộng được sang kiểu scope khác về sau (vd `'brand'`) mà không đổi chữ ký hàm.
+
+**Ảnh hưởng:** migration `b2d3f4a5c6e7` (thêm cột); `seed.py` đồng bộ `scope_type='category'` cho ~9
+quyền sản phẩm/category; `AuthorizationService._resolve_scope_ids` đọc cột này. Chi tiết:
+[`phan-quyen-nang-cap.md`](phan-quyen-nang-cap.md), [`phan-quyen.md`](phan-quyen.md).
+
+---
+
+## QĐ-6: Ownership — chỉ áp cho **người mua**, nhân viên không có ownership
+
+**Vấn đề:** Mọi user (cả nhân viên lẫn người mua) đều là bản ghi `users`. Cần xác định "tài nguyên của
+chính mình" áp cho ai: giỏ hàng/wishlist/đơn hàng là của người mua, nhưng nhân viên quản trị thì sao?
+
+**Quyết định:** Ownership (`resource.user_id == user.id`) **chỉ dành cho người mua** với tài nguyên
+cá nhân của họ: **cart, wishlist, order**. Nhân viên **không** có khái niệm ownership - quyền của
+nhân viên hoàn toàn qua RBAC/ACL + scope category (QĐ-5). Helper:
+`AuthorizationService.require_owner_or_permission(user, perm, resource)` - là chủ resource thì cho qua,
+không thì mới xét quyền.
+
+**Lý do:** Dự án hiện là **một shop, single-tenant**. Nhân viên thao tác trên hàng hóa của shop theo
+quyền được cấp, không "sở hữu" sản phẩm. Gắn ownership cho nhân viên chỉ cần khi lên **sàn nhiều shop**
+(mỗi shop sở hữu sản phẩm/đơn của mình) - khi đó thêm `shop_id` và mở rộng `_is_owner`. **Ghi để nhớ
+cho tương lai**, chưa làm bây giờ.
+
+**Ảnh hưởng:** Phase 5 nâng cấp phân quyền (gom ownership + vá IDOR `order.detail`/`wishlist.detail`).
+Chi tiết: [`phan-quyen-nang-cap.md`](phan-quyen-nang-cap.md).
+
+---
+
 ## Ghi chú khác biệt schema phát hiện ở Phase 2 (đã theo code PHP)
 
 Đối chiếu `src/Entity/*.php` vs `giải thích cơ sở dữ liệu.txt`, lấy **code PHP làm chuẩn**:

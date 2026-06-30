@@ -40,6 +40,13 @@ class ProductAttributeValueService:
     async def find_by_attribute_id(self, attribute_id: int) -> list[ProductAttributeValue]:
         return await self._repo.find_by_attribute_id(attribute_id)
 
+    async def find_by_attribute_ids(
+        self, attribute_ids: set[int]
+    ) -> list[ProductAttributeValue]:
+        # Batch: ủy thác cho repo gom giá trị nhiều thuộc tính (chống N+1)
+        # Batch: delegate to repo to load values of many attributes (avoid N+1)
+        return await self._repo.find_by_attribute_ids(attribute_ids)
+
     async def find_by_value_and_attribute_id(
         self, value: str, attribute_id: int
     ) -> ProductAttributeValue | None:

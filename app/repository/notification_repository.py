@@ -23,6 +23,43 @@ class NotificationRepository(CrudRepository[Notification]):
         )
         return list(result.scalars().all())
 
+    # ── Hộp thư theo người dùng (per-user inbox) ────────────────────────────────
+
+    async def find_by_user_id(
+        self, user_id: int, page: int, limit: int
+    ) -> list[Notification]:
+        # Notifications of one user, newest first, paginated
+        # Thông báo của một user, mới nhất trước, phân trang
+        offset = (page - 1) * limit
+        result = await self.session.execute(
+            select(Notification)
+            .where(Notification.user_id == user_id)
+            .order_by(Notification.created_at.desc())
+            .offset(offset)
+            .limit(limit)
+        )
+        return list(result.scalars().all())
+
+    async def count_unread_by_user(self, user_id: int) -> int:
+        from sqlalchemy import func
+
+        result = await self.session.execute(
+            select(func.count())
+            .select_from(Notification)
+            .where(Notification.user_id == user_id, Notification.is_read == False)  # noqa: E712
+        )
+        return int(result.scalar_one())
+
+    async def mark_all_read_by_user(self, user_id: int) -> int:
+        # Bulk update unread -> read for one user only
+        # Đánh dấu đã đọc hàng loạt cho riêng một user
+        result = await self.session.execute(
+            update(Notification)
+            .where(Notification.user_id == user_id, Notification.is_read == False)  # noqa: E712
+            .values(is_read=True, read_at=datetime.now(timezone.utc))
+        )
+        return result.rowcount
+
     async def mark_all_as_read(self) -> int:
         # Bulk update: set is_read=True, read_at=now for all unread
         # Cập nhật hàng loạt: đánh dấu tất cả chưa đọc là đã đọc

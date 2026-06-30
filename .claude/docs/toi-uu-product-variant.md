@@ -4,6 +4,10 @@
 > Giữ nguyên hành vi nghiệp vụ (DTO trả ra không đổi). Làm từng phase nhỏ, test kỹ mỗi bước.
 > Nền tảng: kiến trúc đa lớp (controller -> service -> repository), một tiến trình, không Redis.
 
+> ✅ **ĐÃ HOÀN TẤT (2026-06-30):** Phase 1-5 + 7 xong, full suite **103 passed** (100 cũ + 3 test
+> batch mới). Phase 6 (cache trang list) bỏ qua vì list đã xuống ~4 query, ưu tiên thấp.
+> Migration `c3e4a5b6d7f8` (5 index + 2 UNIQUE) đã áp vào DB, up/down sạch.
+
 ## Bối cảnh mô hình
 
 Mô hình variant/SKU chuẩn (giống Shopify/Magento), KHÔNG phải EAV thuần - giữ nguyên, không đổi:

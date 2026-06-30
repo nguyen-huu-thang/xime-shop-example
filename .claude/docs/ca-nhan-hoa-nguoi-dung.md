@@ -9,6 +9,26 @@
 - **Tính năng:** (1) Đã xem gần đây, (2) Thịnh hành/Bán chạy, (3) Gợi ý cho bạn (affinity), (4) Mua/xem cùng (co-occurrence).
 - **Cách tính điểm:** **bảng materialized** (affinity lưu sẵn, cập nhật tăng dần), không tính lại toàn bộ mỗi request.
 - **Ghi log:** đồng bộ, nhẹ, **có throttle** (chặn trùng `view` cùng user+product trong cửa sổ ngắn).
+- **Làm tươi co-occurrence:** **Xime scheduler** (job định kỳ). Nguồn: **đồng mua** (order_details).
+
+## ✅ Trạng thái triển khai (2026-06-30)
+
+Phase 1-5 **XONG**, full suite **122 passed**. Migrations đã áp:
+`d4f5a6b7c8e9` (index+CASCADE interactions), `e5a6b7c8d9f0` (user_category_affinity),
+`f6a7b8c9d0e1` (product_cooccurrence). Seed: +6 actions, +quyền `manage_recommendations`.
+
+> ✅ **Scheduler đã kích hoạt:** `apscheduler` 4.0.0a6 đã có sẵn. Job `CooccurrenceRebuildJob` dựng
+> lại co-occurrence **mỗi ngày 03:00 (giờ VN)** qua Xime scheduler (`config/scheduler.py`, package
+> `app.job` đã scan). **Test bị gate bỏ qua** (scheduler rò giữa các TestApplication event loop nên
+> chỉ chạy ở prod - khi pytest không nạp). Dựng lại thủ công bất cứ lúc nào:
+> `POST /api/recommendations/admin/rebuild-cooccurrence` (quyền `manage_recommendations`).
+> Đã smoke-test: `Application().start()/stop()` sạch với scheduler chạy.
+
+**Endpoint đã có:** `GET /api/recommendations/recently-viewed | /trending | /for-you`,
+`GET /api/products/{id}/related`, `POST /api/recommendations/admin/rebuild-cooccurrence`.
+
+**Test mới:** `test_action_registry`, `test_interaction_record`, `test_affinity`, `test_cooccurrence`,
+`test_personalization_integration` (cascade, 3 endpoint, rebuild+related, phân quyền rebuild).
 
 ## Bối cảnh: 3 entity hiện có
 
