@@ -150,7 +150,12 @@ class OrderService:
             opt = await self._option_repo.find(item.product_option_id)
             if not opt:
                 raise AppException("E10502")
-            subtotal += money(opt.price) * item.quantity
+            # Áp % giảm giá của sản phẩm vào đơn giá trước khi cộng dồn.
+            # Apply the product percent discount to the unit price before summing.
+            product = await self._product_repo.find(opt.product_id)
+            discount = product.discount_percentage if product else 0
+            unit_price = pricing.apply_percent_discount(opt.price, discount)
+            subtotal += unit_price * item.quantity
         return subtotal
 
     async def _verify_address_owner(self, address_id: int, user_id: int):
@@ -280,7 +285,9 @@ class OrderService:
                 await self._option_repo.save(opt)
                 affected_product_ids.add(product.id)
 
-                price = money(opt.price)
+                # Đơn giá đã trừ % giảm giá sản phẩm (giá thực tính tiền, lưu vào chi tiết đơn).
+                # Unit price after the product percent discount (the charged price).
+                price = pricing.apply_percent_discount(opt.price, product.discount_percentage)
                 detail = OrderDetail(
                     order_id=order.id,
                     product_id=product.id,
@@ -475,6 +482,56 @@ class OrderService:
             for pid in affected_product_ids:
                 await self._product_svc.invalidate_cache(pid)
             return cancelled
+
+    async def cancel_order(self, order_id: int, user_id: int) -> Order:
+        """Chủ đơn CHỦ ĐỘNG hủy đơn online chưa thanh toán -> hoàn kho + nhả coupon (như quá hạn).
+
+        Lỗi: E10500 không thấy đơn, E2021 không phải chủ, E10507 đã thanh toán,
+        E10508 không phải đơn online (COD không cần hủy kiểu này), E10509 đơn đã hủy.
+
+        Owner cancels their own unpaid online order -> restock + release coupon (same as expiry).
+        """
+        from datetime import datetime, timezone
+
+        affected_product_ids: set[int] = set()
+        async with self._transaction():
+            order = await self._order_repo.find(order_id)
+            if not order:
+                raise AppException("E10500")
+            if order.user_id != user_id:
+                raise AppException("E2021")
+            if order.payment_status:
+                raise AppException("E10507")  # đã thanh toán, không tự hủy
+            if order.cancelled_at is not None:
+                raise AppException("E10509")  # đã hủy rồi
+            if order.payment_provider != "mock_online":
+                raise AppException("E10508")  # chỉ đơn online chờ thanh toán mới tự hủy
+
+            # Hoàn lại tồn kho đã giữ chỗ (khóa dòng option chống race với đơn khác).
+            # Restore reserved stock (lock option rows to avoid races).
+            details = await self._detail_repo.find_by_order_id(order.id)
+            for d in details:
+                if d.product_option_id is None:
+                    continue
+                opt = await self._option_repo.find_for_update(d.product_option_id)
+                if opt is not None:
+                    opt.stock += d.quantity
+                    await self._option_repo.save(opt)
+                    affected_product_ids.add(opt.product_id)
+            # Nhả lại lượt dùng coupon (nếu có)
+            # Release coupon usage (if any)
+            if order.coupon_id is not None:
+                coupon = await self._coupon_svc.get_coupon_for_update(order.coupon_id)
+                if coupon is not None:
+                    await self._coupon_svc.decrement_usage(coupon)
+            order.cancelled_at = datetime.now(timezone.utc)
+            order.payment_deadline = None
+            order.shipping_status = "Đã hủy: người mua hủy đơn"
+            await self._order_repo.save(order)
+
+            for pid in affected_product_ids:
+                await self._product_svc.invalidate_cache(pid)
+            return order
 
     # ── Cập nhật trạng thái giao hàng (admin) ───────────────────────────────────
 

@@ -20,6 +20,18 @@ DEFAULT_SHIPPING_FEE = Decimal("30000")
 FREE_SHIP_THRESHOLD = Decimal("500000")
 
 
+def apply_percent_discount(price, discount_percent) -> Decimal:
+    """Đơn giá sau khi trừ % giảm giá sản phẩm (0-100). Làm tròn 2 chữ số.
+    Unit price after applying the product percent discount (0-100)."""
+    p = money(price)
+    d = int(discount_percent or 0)
+    if d <= 0:
+        return quantize(p)
+    if d >= 100:
+        return Decimal("0")
+    return quantize(p * (Decimal(100 - d) / Decimal(100)))
+
+
 def shipping_fee(subtotal) -> Decimal:
     """Phí ship theo tiền hàng: miễn phí nếu đạt ngưỡng, ngược lại phí phẳng."""
     if money(subtotal) >= FREE_SHIP_THRESHOLD:

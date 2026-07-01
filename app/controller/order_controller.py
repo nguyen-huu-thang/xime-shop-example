@@ -112,6 +112,21 @@ class OrderController:
             orderId=order.id, paymentRef=ref, mockUrl=f"/payment/mock?ref={ref}"
         )
 
+    @post("/{id}/cancel")
+    async def cancel(self, id: int) -> OrderResponse:
+        # Chủ đơn tự hủy đơn online chưa thanh toán -> hoàn kho + nhả coupon.
+        # Owner cancels their own unpaid online order -> restock + release coupon.
+        user = require_login()
+        order = await self._svc.cancel_order(id, user.id)
+        await self._notification.notify(
+            order.user_id,
+            "Đơn hàng đã hủy",
+            f"Đơn #{order.id} đã được hủy theo yêu cầu của bạn. Tồn kho đã được hoàn lại.",
+            link=f"/orders/{order.id}",
+        )
+        _, details = await self._svc.get_order_by_id(order.id)
+        return OrderResponse.from_entities(order, details)
+
     @put("/{id}/shipping-status")
     async def update_shipping(
         self, id: int, body: ShippingStatusUpdateRequest

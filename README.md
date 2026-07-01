@@ -30,7 +30,8 @@ Trình duyệt / Frontend Next.js
 |---|---|
 | **Backend (repo này)** | [nguyen-huu-thang/xime-shop-example](https://github.com/nguyen-huu-thang/xime-shop-example) |
 | **Frontend (Next.js)** | [nguyen-huu-thang/shop-frontend-v2](https://github.com/nguyen-huu-thang/shop-frontend-v2) |
-| Bản gốc PHP/Symfony | [nguyen-huu-thang/shop-backend](https://github.com/nguyen-huu-thang/shop-backend) |
+| Bản gốc PHP/Symfony (backend) | [nguyen-huu-thang/shop-backend](https://github.com/nguyen-huu-thang/shop-backend) |
+| Bản gốc React (frontend) | [nguyen-huu-thang/shop-frontend](https://github.com/nguyen-huu-thang/shop-frontend) |
 | XIME Framework | [nguyen-huu-thang/xime-framework](https://github.com/nguyen-huu-thang/xime-framework) |
 
 > **Frontend** dùng Next.js + React, gọi thẳng các API của backend này. Mô hình giao tiếp, danh sách
@@ -94,13 +95,13 @@ Chi tiết từng mảng xem trong [Tài liệu](#tài-liệu).
 
 - Python 3.12+
 - PostgreSQL 14+
-- XIME Framework (cài từ source - xem dưới)
+- XIME Framework 0.6.2+ (cài từ PyPI)
 
 ### Cài đặt
 
 ```bash
-# 1. Cài XIME framework (editable, từ source)
-pip install -e "<đường-dẫn>/xime framework"
+# 1. Cài XIME framework (từ PyPI, phiên bản mới nhất 0.6.2)
+pip install xime
 
 # 2. Cài phụ thuộc dự án
 pip install -e ".[dev]"

@@ -32,6 +32,7 @@ from app.service.product_attribute_service import ProductAttributeService
 from app.service.product_attribute_value_service import ProductAttributeValueService
 from app.service.product_option_service import ProductOptionService
 from app.service.product_option_value_service import ProductOptionValueService
+from app.service import pricing
 
 
 class ProductService:
@@ -345,10 +346,17 @@ class ProductService:
                 if attr:
                     option_vals[attr.name] = pav.value
 
+            # Đơn giá hiển thị ở giỏ = giá option đã trừ % giảm giá sản phẩm (khớp giá tính tiền).
+            # Cart display unit price = option price after the product percent discount.
+            if opt.price is None:
+                unit_price = None
+            else:
+                discount = product.discount_percentage if product else 0
+                unit_price = float(pricing.apply_percent_discount(opt.price, discount))
             return {
                 "productId": opt.product_id,
                 "productName": product.name if product else None,
-                "price": float(opt.price) if opt.price is not None else None,
+                "price": unit_price,
                 "optionValues": option_vals,
             }
 
