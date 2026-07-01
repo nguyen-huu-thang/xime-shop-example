@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 from sqlalchemy import delete, select, update
 
 from app.entity.notification import Notification
-from app.pagination import paginate
+from app.utils.pagination import paginate
 from xime.starters.sqlalchemy import CrudRepository
 
 

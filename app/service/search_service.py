@@ -1,4 +1,4 @@
-from app.pagination import paginate
+from app.utils.pagination import paginate
 from app.service.product_service import ProductService
 
 

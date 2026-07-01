@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from decimal import Decimal
 
-from app.money import money, quantize
+from app.utils.money import money, quantize
 
 # Phí ship phẳng mặc định (đồng)
 # Flat default shipping fee (VND)

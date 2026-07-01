@@ -1,7 +1,7 @@
 from sqlalchemy import select
 
 from app.entity.review import Review
-from app.pagination import paginate
+from app.utils.pagination import paginate
 from xime.starters.sqlalchemy import CrudRepository
 
 

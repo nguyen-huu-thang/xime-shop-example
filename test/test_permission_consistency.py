@@ -15,7 +15,7 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
-from app.seed import PERMISSIONS
+from app.utils.seed import PERMISSIONS
 
 # Thư mục controller + tên 2 method kiểm quyền (đối số thứ 2 là tên quyền)
 # Controller dir + the two permission-check methods (arg index 1 is the permission name)

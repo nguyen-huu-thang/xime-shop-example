@@ -3,7 +3,7 @@ from __future__ import annotations
 from sqlalchemy import func, or_, select
 
 from app.entity.product import Product
-from app.pagination import paginate
+from app.utils.pagination import paginate
 from xime.starters.sqlalchemy import CrudRepository
 
 

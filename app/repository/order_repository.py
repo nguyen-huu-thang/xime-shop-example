@@ -5,7 +5,7 @@ from datetime import datetime
 from sqlalchemy import func, select
 
 from app.entity.order import Order
-from app.pagination import paginate
+from app.utils.pagination import paginate
 from xime.starters.sqlalchemy import CrudRepository
 
 

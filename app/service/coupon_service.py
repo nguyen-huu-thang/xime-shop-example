@@ -11,7 +11,7 @@ from decimal import Decimal
 from xime.core.transaction.manager import TransactionManager
 
 from app.dto.coupon_application import CouponApplication
-from app.money import money, quantize
+from app.utils.money import money, quantize
 from app.entity.coupon import Coupon
 from app.exception.app_exception import AppException
 from app.repository.coupon_repository import CouponRepository
