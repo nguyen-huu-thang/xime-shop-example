@@ -3,6 +3,7 @@ from __future__ import annotations
 from sqlalchemy import func, or_, select
 
 from app.entity.product import Product
+from app.pagination import paginate
 from xime.starters.sqlalchemy import CrudRepository
 
 
@@ -38,7 +39,7 @@ class ProductRepository(CrudRepository[Product]):
     async def find_all_paginated(self, page: int, limit: int) -> list[Product]:
         # Only return non-deleted products
         # Chỉ trả về sản phẩm chưa bị xóa mềm
-        offset = (page - 1) * limit
+        offset, limit = paginate(page, limit)
         result = await self.session.execute(
             select(Product)
             .where(Product.is_delete.is_(False))
@@ -55,7 +56,7 @@ class ProductRepository(CrudRepository[Product]):
         # Non-deleted products within the allowed categories (employee-scope filter)
         if not category_ids:
             return []
-        offset = (page - 1) * limit
+        offset, limit = paginate(page, limit)
         result = await self.session.execute(
             select(Product)
             .where(Product.is_delete.is_(False))

@@ -99,19 +99,31 @@ async def test_recommendation_endpoints():
             headers=admin,
         )).json()["id"]
 
+        # Dùng USER MỚI TINH (affinity sạch) để gợi ý mang tính tất định. Nếu dùng admin,
+        # affinity tích lũy qua nhiều lần test sẽ át category vừa xem -> for-you không chứa P1/P2.
+        # Use a FRESH user so affinity is clean and for-you is deterministic.
+        uname = f"rec_{_S}_{uuid.uuid4().hex[:6]}"
+        u = (await client.post(
+            "/api/users",
+            json={"username": uname[:20], "email": f"{uname}@test.local",
+                  "password": "Passw0rd!", "isActive": True},
+            headers=admin,
+        )).json()
+        u_headers = await _login(client, uname[:20], "Passw0rd!")
+
         try:
-            # Admin xem P1 -> ghi view + dựng affinity cho category
-            r = await client.get(f"/api/products/{p1}", headers=admin)
+            # User mới xem P1 -> ghi view + dựng affinity cho category (category duy nhất)
+            r = await client.get(f"/api/products/{p1}", headers=u_headers)
             assert r.status_code == 200, r.text
 
             # recently-viewed chứa P1
-            r = await client.get("/api/recommendations/recently-viewed", headers=admin)
+            r = await client.get("/api/recommendations/recently-viewed", headers=u_headers)
             assert r.status_code == 200, r.text
             rv_ids = {p["id"] for p in r.json()}
             assert p1 in rv_ids, f"recently-viewed phải chứa P1: {rv_ids}"
 
-            # for-you: gợi ý theo affinity category -> chứa sản phẩm trong category (P1 và/hoặc P2)
-            r = await client.get("/api/recommendations/for-you", headers=admin)
+            # for-you: affinity chỉ có 1 category (của P1) -> gợi ý sản phẩm trong category (P1 và/hoặc P2)
+            r = await client.get("/api/recommendations/for-you", headers=u_headers)
             assert r.status_code == 200, r.text
             fy_ids = {p["id"] for p in r.json()}
             assert fy_ids & {p1, p2}, f"for-you phải gợi ý sản phẩm trong category: {fy_ids}"
@@ -122,6 +134,7 @@ async def test_recommendation_endpoints():
             assert isinstance(r.json(), list)
             print("\n[pers] ✓ recently-viewed / for-you / trending hoạt động")
         finally:
+            await client.delete(f"/api/users/{u['id']}", headers=admin)
             await client.delete(f"/api/products/{p1}", headers=admin)
             await client.delete(f"/api/products/{p2}", headers=admin)
             await client.delete(f"/api/categories/{cat_id}", headers=admin)

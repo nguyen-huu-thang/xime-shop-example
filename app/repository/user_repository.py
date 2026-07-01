@@ -3,6 +3,7 @@ from __future__ import annotations
 from sqlalchemy import select
 
 from app.entity.user import User
+from app.pagination import paginate
 from xime.starters.sqlalchemy import CrudRepository
 
 
@@ -30,12 +31,12 @@ class UserRepository(CrudRepository[User]):
         return [int(r) for r in result.scalars().all()]
 
     async def find_all_paginated(self, page: int, limit: int) -> list[User]:
-        # Admin user management: list all users (active + inactive) so they can be
-        # activated/deactivated, ordered by id.
-        # Quản trị user: liệt kê mọi user (cả đang khóa) để có thể kích hoạt/khóa lại,
-        # sắp theo id.
-        offset = (page - 1) * limit
+        # Admin user management: list all users (active + inactive), NEWEST FIRST so recently
+        # registered users are visible on page 1 (consistent with orders/files admin lists).
+        # Quản trị user: liệt kê mọi user (cả đang khóa), MỚI NHẤT TRƯỚC để user vừa đăng ký
+        # hiện ở trang 1 (nhất quán với danh sách admin của orders/files).
+        offset, limit = paginate(page, limit)
         result = await self.session.execute(
-            select(User).order_by(User.id.asc()).offset(offset).limit(limit)
+            select(User).order_by(User.id.desc()).offset(offset).limit(limit)
         )
         return list(result.scalars().all())

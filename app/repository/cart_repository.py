@@ -3,6 +3,7 @@ from __future__ import annotations
 from sqlalchemy import select
 
 from app.entity.cart import Cart
+from app.pagination import paginate
 from xime.starters.sqlalchemy import CrudRepository
 
 
@@ -34,7 +35,7 @@ class CartRepository(CrudRepository[Cart]):
         return list(result.scalars().all())
 
     async def find_all_paginated(self, page: int, limit: int) -> list[Cart]:
-        offset = (page - 1) * limit
+        offset, limit = paginate(page, limit)
         result = await self.session.execute(
             select(Cart).offset(offset).limit(limit)
         )

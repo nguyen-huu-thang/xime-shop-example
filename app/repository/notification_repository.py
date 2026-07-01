@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 from sqlalchemy import delete, select, update
 
 from app.entity.notification import Notification
+from app.pagination import paginate
 from xime.starters.sqlalchemy import CrudRepository
 
 
@@ -30,7 +31,7 @@ class NotificationRepository(CrudRepository[Notification]):
     ) -> list[Notification]:
         # Notifications of one user, newest first, paginated
         # Thông báo của một user, mới nhất trước, phân trang
-        offset = (page - 1) * limit
+        offset, limit = paginate(page, limit)
         result = await self.session.execute(
             select(Notification)
             .where(Notification.user_id == user_id)

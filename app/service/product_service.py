@@ -26,6 +26,7 @@ from app.entity.product_option import ProductOption
 from app.entity.product_option_value import ProductOptionValue
 from app.exception.app_exception import AppException
 from app.repository.category_repository import CategoryRepository
+from app.repository.file_repository import FileRepository
 from app.repository.product_repository import ProductRepository
 from app.service.product_attribute_service import ProductAttributeService
 from app.service.product_attribute_value_service import ProductAttributeValueService
@@ -45,6 +46,7 @@ class ProductService:
         cache: CacheService,
         product_repository: ProductRepository,
         category_repository: CategoryRepository,
+        file_repository: FileRepository,
         product_attribute_service: ProductAttributeService,
         product_attribute_value_service: ProductAttributeValueService,
         product_option_service: ProductOptionService,
@@ -54,6 +56,7 @@ class ProductService:
         self._cache = cache
         self._product_repo = product_repository
         self._category_repo = category_repository
+        self._file_repo = file_repository
         self._attr_svc = product_attribute_service
         self._attr_val_svc = product_attribute_value_service
         self._option_svc = product_option_service
@@ -74,6 +77,11 @@ class ProductService:
         # default=float: safe if a DTO happens to carry a Decimal value.
         payload = json.dumps(value, default=float).encode("utf-8")
         await self._cache.set(key, payload, ttl=self._CACHE_TTL)
+
+    async def invalidate_cache(self, product_id: int | None = None) -> None:
+        """Public: xóa cache danh sách + chi tiết một sản phẩm. Gọi từ nơi khác (vd OrderService)
+        khi tồn kho đổi do đặt/hủy đơn, để `GET /products` không hiển thị tồn kho cũ."""
+        await self._invalidate_product_cache(product_id)
 
     async def _invalidate_product_cache(self, product_id: int | None = None) -> None:
         # Xóa cache danh sách tổng + cache chi tiết của product bị thay đổi.
@@ -177,6 +185,14 @@ class ProductService:
         for ov in optvals:
             optvals_by_option.setdefault(ov.option_id, []).append(ov)
 
+        # Ảnh đại diện mỗi sản phẩm: file đang hoạt động đầu tiên (theo sort) - 1 batch query.
+        # Primary image per product: the first active file (by sort) - single batch query.
+        images = await self._file_repo.find_active_by_targets("products", product_ids)
+        image_by_product: dict[int, str] = {}
+        for f in images:
+            if f.target_id is not None and f.target_id not in image_by_product:
+                image_by_product[f.target_id] = f.file_path
+
         result: list[dict] = []
         for product in products:
             attributes = self._build_attributes(
@@ -196,6 +212,9 @@ class ProductService:
                     "stock": price_stock["stock"],
                     "attribute": attributes,
                     "discountPercentage": product.discount_percentage,
+                    # Đường dẫn ảnh đại diện (file_path); FE dựng URL qua /media/{path}. None nếu chưa có ảnh.
+                    # Primary image path; the FE builds the URL via /media/{path}.
+                    "imageUrl": image_by_product.get(product.id),
                 }
             )
         return result
@@ -426,7 +445,7 @@ class ProductService:
             if category_id:
                 cat = await self._category_repo.find(category_id)
                 if not cat:
-                    raise AppException("E10300")
+                    raise AppException("E10202")  # Danh mục không tồn tại (404)
                 db_product.category_id = category_id
 
             await self._product_repo.save(db_product)

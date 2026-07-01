@@ -132,9 +132,11 @@ class NotificationService:
         user_ids = await self._user_svc.get_all_active_user_ids()
         if not user_ids:
             return 0
+        # Chèn theo lô (save_all) thay vì save() từng cái -> nhanh hơn khi nhiều user.
+        # Bulk insert instead of one save() per user -> much faster for many users.
         async with self._transaction():
-            for uid in user_ids:
-                await self._repo.save(
+            await self._repo.save_all(
+                [
                     Notification(
                         user_id=uid,
                         title=title,
@@ -142,7 +144,9 @@ class NotificationService:
                         type="push",
                         link=link,
                     )
-                )
+                    for uid in user_ids
+                ]
+            )
         return len(user_ids)
 
     async def mark_as_read(self, notification_id: int, user_id: int) -> Notification:

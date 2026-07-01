@@ -1,6 +1,7 @@
 from sqlalchemy import select
 
 from app.entity.file import File
+from app.pagination import paginate
 from xime.starters.sqlalchemy import CrudRepository
 
 
@@ -27,8 +28,27 @@ class FileRepository(CrudRepository[File]):
         result = await self.session.execute(stmt)
         return list(result.scalars().all())
 
+    async def find_active_by_targets(
+        self, table_name: str, target_ids: set[int]
+    ) -> list[File]:
+        # Batch: lấy file đang hoạt động cho nhiều bản ghi cùng bảng (chống N+1 khi dựng list DTO).
+        # Sắp theo target_id, sort, id để chọn ảnh đại diện (đầu tiên mỗi target) ở tầng service.
+        # Batch fetch active files for many records of one table (avoid N+1 when building list DTOs).
+        if not target_ids:
+            return []
+        result = await self.session.execute(
+            select(File)
+            .where(
+                File.list_table_id == table_name,
+                File.target_id.in_(target_ids),
+                File.is_active == True,  # noqa: E712
+            )
+            .order_by(File.target_id, File.sort, File.id)
+        )
+        return list(result.scalars().all())
+
     async def find_all_paginated(self, page: int, limit: int) -> list[File]:
-        offset = (page - 1) * limit
+        offset, limit = paginate(page, limit)
         result = await self.session.execute(
             select(File).order_by(File.id.desc()).offset(offset).limit(limit)
         )

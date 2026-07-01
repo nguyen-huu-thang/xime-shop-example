@@ -59,3 +59,14 @@ class Order(TimestampMixin, Base):
     paid_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    # Hạn thanh toán cho đơn online (mock): quá hạn chưa trả -> hoàn kho + hủy đơn.
+    # COD để null (thu tiền khi giao). Kho được trừ NGAY lúc đặt (giữ chỗ kiểu Shopee).
+    # Payment deadline for online orders; overdue unpaid -> restock + cancel. Null for COD.
+    payment_deadline: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    # Thời điểm đơn bị hủy (quá hạn thanh toán) - kho đã được hoàn lại.
+    # When the order was cancelled (payment overdue) - stock has been restored.
+    cancelled_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )

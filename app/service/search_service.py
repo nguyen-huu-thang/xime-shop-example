@@ -1,3 +1,4 @@
+from app.pagination import paginate
 from app.service.product_service import ProductService
 
 
@@ -46,7 +47,7 @@ class SearchService:
         ranked.sort(key=lambda x: x["relevanceScore"], reverse=True)
 
         total = len(ranked)
-        offset = (page - 1) * limit
+        offset, limit = paginate(page, limit)
         paged = ranked[offset: offset + limit]
 
         return {

@@ -36,6 +36,12 @@ class RefreshTokenService:
         async with self._transaction():
             return await self._repo.delete_by_user_id(user_id)
 
+    async def delete_by_user_except(self, user_id: int, keep_jti: str | None) -> int:
+        """Thu hồi refresh token của mọi phiên KHÁC, giữ phiên hiện tại (keep_jti).
+        Dùng khi đổi mật khẩu và người dùng chọn 'đăng xuất các phiên khác'."""
+        async with self._transaction():
+            return await self._repo.delete_by_user_id_except(user_id, keep_jti)
+
     async def get_token_by_id(self, jti: str) -> RefreshToken | None:
         """Look up a refresh token by jti.
         Tra cứu refresh token theo jti.

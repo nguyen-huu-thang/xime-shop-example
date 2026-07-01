@@ -91,6 +91,18 @@ controller/service/repository/entity, test pass. Các cải tiến đã làm sau
   update chỉ chủ sở hữu - vá IDOR; detail không lộ review chưa duyệt). `/media/{key}` giữ công khai
   có chủ đích (ảnh sản phẩm). Test regression `test/test_security.py`. Chi tiết:
   [`.claude/docs/audit-phan-quyen-2026-06-30.md`](.claude/docs/audit-phan-quyen-2026-06-30.md).
+- **Rà soát backend + vá lỗi (2026-07-01) - đã xong, 166 test pass:** khóa tồn kho/coupon chống
+  race (`SELECT FOR UPDATE`), kẹp phân trang (`app/pagination.py`) chống 500 do offset âm, **giữ
+  chỗ tồn kho kiểu Shopee** (mọi đơn trừ kho ngay lúc đặt; đơn online có hạn 1 ngày, quá hạn
+  `ExpireOrdersJob` hoàn kho + hủy đơn; cột `order_details.product_option_id` +
+  `orders.payment_deadline/cancelled_at`, migration `f7b8c9d0e1a2` + `a8c9d0e1f2b3`), kiểm tra tồn
+  kho khi sửa giỏ, sửa mã lỗi sai (cart/product), rate limit login/forgot-password/otp qua
+  CacheService (`RateLimiterService`), đổi mật khẩu kèm tùy chọn đăng xuất phiên khác (giữ phiên
+  hiện tại), danh sách user admin newest-first. **Nhóm nhẹ:** chống dò tài khoản + timing khi
+  login (E1005 chung + bcrypt giả), tiền tính bằng Decimal (`app/money.py`), thêm `POST /logout`
+  (giữ GET), `broadcast` bulk insert, đổi tồn kho làm mới cache DTO sản phẩm. Test regression
+  `test/test_hardening.py`. Chi tiết:
+  [`.claude/docs/ra-soat-backend-2026-07-01.md`](.claude/docs/ra-soat-backend-2026-07-01.md).
 
 
 ## framework issues

@@ -9,6 +9,16 @@ from xime.starters.sqlalchemy import CrudRepository
 class ProductOptionRepository(CrudRepository[ProductOption]):
     model = ProductOption
 
+    async def find_for_update(self, option_id: int) -> ProductOption | None:
+        # Row lock (SELECT ... FOR UPDATE) chống bán vượt tồn kho khi nhiều đơn cùng trừ kho.
+        # Row lock to prevent overselling when concurrent orders decrement the same stock.
+        result = await self.session.execute(
+            select(ProductOption)
+            .where(ProductOption.id == option_id)
+            .with_for_update()
+        )
+        return result.scalar_one_or_none()
+
     async def find_by_product_id(self, product_id: int) -> list[ProductOption]:
         result = await self.session.execute(
             select(ProductOption).where(ProductOption.product_id == product_id)

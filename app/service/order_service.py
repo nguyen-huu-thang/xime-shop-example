@@ -18,6 +18,7 @@ from xime.core.transaction.manager import TransactionManager
 from app.entity.order import Order
 from app.entity.order_detail import OrderDetail
 from app.exception.app_exception import AppException
+from app.money import money, quantize
 from app.repository.address_repository import AddressRepository
 from app.repository.cart_repository import CartRepository
 from app.repository.order_detail_repository import OrderDetailRepository
@@ -30,9 +31,14 @@ from app.repository.product_repository import ProductRepository
 from app.service import pricing
 from app.service.authorization_service import AuthorizationService
 from app.service.coupon_service import CouponService
+from app.service.product_service import ProductService
 
 
 class OrderService:
+    # Hạn thanh toán cho đơn online (mock), tính bằng giây. Quá hạn -> hoàn kho + hủy đơn.
+    # Payment window for online (mock) orders, in seconds. Overdue -> restock + cancel.
+    _online_payment_ttl = 24 * 3600  # 1 ngày / 1 day
+
     def __init__(
         self,
         transaction: TransactionManager,
@@ -47,6 +53,7 @@ class OrderService:
         address_repository: AddressRepository,
         coupon_service: CouponService,
         authorization_service: AuthorizationService,
+        product_service: ProductService,
     ) -> None:
         self._transaction = transaction
         self._order_repo = order_repository
@@ -60,6 +67,7 @@ class OrderService:
         self._address_repo = address_repository
         self._coupon_svc = coupon_service
         self._authz = authorization_service
+        self._product_svc = product_service
 
     # ── Read helpers ───────────────────────────────────────────────────────────
 
@@ -134,14 +142,15 @@ class OrderService:
 
     # ── Tính tiền & xem trước (preview) ─────────────────────────────────────────
 
-    async def _subtotal_from_cart(self, cart_items: list) -> float:
-        """Tổng tiền hàng từ các cart item (giá lấy theo product_option). Trong transaction."""
-        subtotal = 0.0
+    async def _subtotal_from_cart(self, cart_items: list):
+        """Tổng tiền hàng từ các cart item (giá lấy theo product_option). Trong transaction.
+        Trả Decimal (tránh sai số float khi cộng dồn)."""
+        subtotal = money(0)
         for item in cart_items:
             opt = await self._option_repo.find(item.product_option_id)
             if not opt:
                 raise AppException("E10502")
-            subtotal += item.quantity * float(opt.price or 0)
+            subtotal += money(opt.price) * item.quantity
         return subtotal
 
     async def _verify_address_owner(self, address_id: int, user_id: int):
@@ -170,8 +179,8 @@ class OrderService:
 
             subtotal = await self._subtotal_from_cart(cart_items)
             ship = pricing.shipping_fee(subtotal)
-            product_discount = 0.0
-            ship_discount = 0.0
+            product_discount = money(0)
+            ship_discount = money(0)
             coupon_applied = False
             applied_code: str | None = None
             if coupon_code:
@@ -187,7 +196,7 @@ class OrderService:
                 subtotal, ship, product_discount, ship_discount
             )
             return {
-                "subtotal": round(subtotal, 2),
+                "subtotal": quantize(subtotal),
                 "shipping_fee": ship,
                 "product_discount": product_discount,
                 "ship_discount": ship_discount,
@@ -213,6 +222,12 @@ class OrderService:
         payment_provider = data.get("payment_provider") or "cod"
         if payment_provider not in ("cod", "mock_online"):
             raise AppException("E10508")
+        # Giữ chỗ tồn kho kiểu Shopee: MỌI đơn (COD lẫn online) trừ kho + tăng lượt coupon NGAY
+        # lúc đặt. Đơn online có hạn thanh toán (payment_deadline); quá hạn chưa trả -> job hoàn
+        # kho + hủy đơn. Tránh cảnh khách săn mã/hàng hiếm mà kho chỉ trừ khi thanh toán.
+        # Reserve-on-order (Shopee-like): every order decrements stock + bumps coupon at creation;
+        # online orders carry a payment deadline and get restocked+cancelled if overdue.
+        is_online = payment_provider == "mock_online"
 
         coupon_code = data.get("coupon_code")
 
@@ -241,9 +256,13 @@ class OrderService:
             order = await self._order_repo.save(order)
 
             details: list[OrderDetail] = []
-            subtotal = 0.0
+            affected_product_ids: set[int] = set()
+            subtotal = money(0)
             for item in cart_items:
-                opt = await self._option_repo.find(item.product_option_id)
+                # Khóa dòng option (SELECT FOR UPDATE) chống bán vượt tồn kho khi nhiều đơn
+                # cùng trừ kho. Trừ kho NGAY cho mọi đơn (giữ chỗ).
+                # Lock the option row to prevent overselling; decrement stock now for every order.
+                opt = await self._option_repo.find_for_update(item.product_option_id)
                 if not opt:
                     raise AppException("E10502")
                 if opt.stock < item.quantity:
@@ -259,11 +278,13 @@ class OrderService:
 
                 opt.stock -= item.quantity
                 await self._option_repo.save(opt)
+                affected_product_ids.add(product.id)
 
-                price = float(opt.price or 0)
+                price = money(opt.price)
                 detail = OrderDetail(
                     order_id=order.id,
                     product_id=product.id,
+                    product_option_id=opt.id,
                     name=product.name,
                     quantity=item.quantity,
                     price=price,
@@ -272,7 +293,7 @@ class OrderService:
                 )
                 detail = await self._detail_repo.save(detail)
                 details.append(detail)
-                subtotal += item.quantity * price
+                subtotal += price * item.quantity
 
                 # Remove cart item
                 # Xóa cart item
@@ -281,12 +302,14 @@ class OrderService:
             # Phí ship + áp coupon (nối đầy đủ vào total_amount)
             # Shipping fee + coupon (fully wired into total_amount)
             ship = pricing.shipping_fee(subtotal)
-            product_discount = 0.0
-            ship_discount = 0.0
+            product_discount = money(0)
+            ship_discount = money(0)
             coupon_app = None
             if coupon_code:
+                # Khóa dòng coupon (tăng used_count an toàn dưới truy cập đồng thời - săn mã).
+                # Lock the coupon row so used_count bumps atomically under contention.
                 coupon_app = await self._coupon_svc.resolve(
-                    coupon_code, subtotal, ship, user_id
+                    coupon_code, subtotal, ship, user_id, for_update=True
                 )
                 product_discount = coupon_app.product_discount
                 ship_discount = coupon_app.ship_discount
@@ -298,11 +321,26 @@ class OrderService:
             order.total_amount = pricing.order_total(
                 subtotal, ship, product_discount, ship_discount
             )
+            # Đơn online: đặt hạn thanh toán (1 ngày). Quá hạn -> job hoàn kho + hủy đơn.
+            # Online order: set a 1-day payment deadline; overdue -> job restocks + cancels.
+            if is_online:
+                from datetime import datetime, timedelta, timezone
+
+                order.payment_deadline = datetime.now(timezone.utc) + timedelta(
+                    seconds=self._online_payment_ttl
+                )
             await self._order_repo.save(order)
 
-            # Tăng lượt dùng coupon trong cùng transaction (atomic với việc tạo đơn)
+            # Tăng lượt dùng coupon ngay khi đặt (atomic với việc trừ kho tạo đơn). Nếu đơn
+            # online quá hạn bị hủy, job sẽ nhả lại lượt dùng (decrement_usage).
+            # Bump coupon usage at order time; overdue online orders release it on cancel.
             if coupon_app is not None:
                 await self._coupon_svc.increment_usage(coupon_app.coupon)
+
+            # Tồn kho vừa đổi -> xóa cache DTO sản phẩm để /products không hiển thị tồn kho cũ.
+            # Stock changed -> drop product DTO cache so listings don't show stale stock.
+            for pid in affected_product_ids:
+                await self._product_svc.invalidate_cache(pid)
 
             return order, details
 
@@ -362,6 +400,8 @@ class OrderService:
                 raise AppException("E2021")
             if order.payment_status:
                 raise AppException("E10507")
+            if order.cancelled_at is not None:
+                raise AppException("E10509")  # đơn đã hủy (quá hạn thanh toán)
             if order.payment_provider != "mock_online":
                 raise AppException("E10508")
             ref = uuid.uuid4().hex
@@ -371,20 +411,70 @@ class OrderService:
 
     async def confirm_mock_payment(self, payment_ref: str, success: bool) -> Order:
         """Callback giả lập: khớp payment_ref đang chờ -> set đã thanh toán nếu success.
-        Lỗi E10509 nếu ref không khớp hoặc đơn đã xử lý (đã thanh toán).
+
+        Kho đã được trừ lúc đặt (giữ chỗ), nên ở đây chỉ đánh dấu đã thanh toán. Đơn đã bị hủy
+        do quá hạn (cancelled_at đã set, kho đã hoàn) thì KHÔNG cho thanh toán nữa (E10509).
+
+        Lỗi E10509 nếu ref không khớp / đơn đã thanh toán / đơn đã hủy quá hạn.
         """
         from datetime import datetime, timezone
 
         async with self._transaction():
             order = await self._order_repo.find_by_payment_ref(payment_ref)
-            if not order or order.payment_status:
+            if not order or order.payment_status or order.cancelled_at is not None:
                 raise AppException("E10509")
             if success:
                 order.payment_status = True
                 order.paid_at = datetime.now(timezone.utc)
+                order.payment_deadline = None  # đã trả, bỏ hạn
                 order.shipping_status = "Đã thanh toán, chờ giao"
             await self._order_repo.save(order)
             return order
+
+    async def expire_overdue_online_orders(self, cutoff: datetime | None = None) -> int:
+        """Hủy các đơn online quá hạn thanh toán và HOÀN KHO lại (giữ chỗ đã hết hạn).
+
+        Với mỗi đơn quá hạn: cộng lại tồn kho từng dòng (khóa dòng option), nhả lại lượt dùng
+        coupon (decrement_usage), đánh dấu cancelled_at + trạng thái hủy. Trả về số đơn đã hủy.
+        Gọi bởi ExpireOrdersJob theo lịch; test có thể truyền cutoff (mốc thời gian) để mô phỏng.
+
+        Cancel overdue unpaid online orders and restore their reserved stock + coupon usage.
+        """
+        from datetime import datetime as _dt
+        from datetime import timezone as _tz
+
+        now = _dt.now(_tz.utc)
+        cutoff = cutoff or now
+        affected_product_ids: set[int] = set()
+        async with self._transaction():
+            orders = await self._order_repo.find_overdue_unpaid_online(cutoff)
+            cancelled = 0
+            for order in orders:
+                details = await self._detail_repo.find_by_order_id(order.id)
+                for d in details:
+                    if d.product_option_id is None:
+                        continue  # đơn cũ trước khi có cột option_id
+                    opt = await self._option_repo.find_for_update(d.product_option_id)
+                    if opt is not None:
+                        opt.stock += d.quantity  # hoàn lại phần đã giữ chỗ
+                        await self._option_repo.save(opt)
+                        affected_product_ids.add(opt.product_id)
+                # Nhả lại lượt dùng coupon (nếu đơn có áp mã)
+                # Release the coupon usage slot (if the order used one)
+                if order.coupon_id is not None:
+                    coupon = await self._coupon_svc.get_coupon_for_update(order.coupon_id)
+                    if coupon is not None:
+                        await self._coupon_svc.decrement_usage(coupon)
+                order.cancelled_at = now
+                order.shipping_status = "Đã hủy: quá hạn thanh toán"
+                await self._order_repo.save(order)
+                cancelled += 1
+
+            # Tồn kho được hoàn -> xóa cache DTO sản phẩm bị ảnh hưởng.
+            # Stock restored -> drop affected product DTO caches.
+            for pid in affected_product_ids:
+                await self._product_svc.invalidate_cache(pid)
+            return cancelled
 
     # ── Cập nhật trạng thái giao hàng (admin) ───────────────────────────────────
 

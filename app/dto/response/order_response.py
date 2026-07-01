@@ -7,6 +7,8 @@ camelCase mà client đang nhận (id, userId, totalAmount, ...).
 """
 from __future__ import annotations
 
+from datetime import datetime
+
 from pydantic import BaseModel
 
 from app.entity.order import Order
@@ -69,8 +71,15 @@ class OrderResponse(BaseModel):
     address: str
     totalAmount: float
     paymentMethod: str
+    # Nhà cung cấp thanh toán ('cod' | 'mock_online') - tách khỏi paymentMethod để FE quyết định
+    # có cho "Thanh toán ngay" hay không.
+    paymentProvider: str
     shippingStatus: str
     paymentStatus: bool
+    # Hạn thanh toán đơn online (null nếu COD/đã trả); quá hạn đơn tự hủy + hoàn kho.
+    paymentDeadline: datetime | None = None
+    # Thời điểm đơn bị hủy do quá hạn thanh toán (null nếu còn hiệu lực).
+    cancelledAt: datetime | None = None
     details: list[OrderDetailResponse]
 
     @classmethod
@@ -81,7 +90,10 @@ class OrderResponse(BaseModel):
             address=order.address,
             totalAmount=float(order.total_amount),
             paymentMethod=order.payment_method,
+            paymentProvider=order.payment_provider,
             shippingStatus=order.shipping_status,
             paymentStatus=order.payment_status,
+            paymentDeadline=order.payment_deadline,
+            cancelledAt=order.cancelled_at,
             details=[OrderDetailResponse.from_entity(d) for d in details],
         )

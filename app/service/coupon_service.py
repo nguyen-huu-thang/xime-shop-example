@@ -6,10 +6,12 @@ scope SP/ship, giới hạn lượt dùng, mỗi-user-một-lần).
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from decimal import Decimal
 
 from xime.core.transaction.manager import TransactionManager
 
 from app.dto.coupon_application import CouponApplication
+from app.money import money, quantize
 from app.entity.coupon import Coupon
 from app.exception.app_exception import AppException
 from app.repository.coupon_repository import CouponRepository
@@ -126,38 +128,49 @@ class CouponService:
 
     @staticmethod
     def compute_discount(
-        coupon: Coupon, subtotal: float, shipping_fee: float
-    ) -> tuple[float, float]:
-        """Tính (product_discount, ship_discount) từ coupon. Hàm thuần, không DB.
+        coupon: Coupon, subtotal, shipping_fee
+    ) -> tuple[Decimal, Decimal]:
+        """Tính (product_discount, ship_discount) từ coupon. Hàm thuần, không DB. Dùng Decimal.
 
         base = subtotal nếu applies_to='product', = shipping_fee nếu 'shipping'.
         percent -> base * discount/100 (trần max_discount nếu có); fixed -> discount.
         Giảm không vượt quá base tương ứng. Làm tròn 2 chữ số.
         """
         applies_to = coupon.applies_to or "product"
-        base = subtotal if applies_to == "product" else shipping_fee
+        sub = money(subtotal)
+        ship = money(shipping_fee)
+        base = sub if applies_to == "product" else ship
 
         if (coupon.discount_type or "fixed") == "percent":
-            amount = base * float(coupon.discount) / 100.0
+            amount = base * money(coupon.discount) / Decimal("100")
             if coupon.max_discount is not None:
-                amount = min(amount, float(coupon.max_discount))
+                amount = min(amount, money(coupon.max_discount))
         else:
-            amount = float(coupon.discount)
+            amount = money(coupon.discount)
 
-        amount = max(amount, 0.0)
+        if amount < 0:
+            amount = Decimal("0")
         if applies_to == "product":
-            return round(min(amount, subtotal), 2), 0.0
-        return 0.0, round(min(amount, shipping_fee), 2)
+            return quantize(min(amount, sub)), Decimal("0")
+        return Decimal("0"), quantize(min(amount, ship))
 
     async def resolve(
-        self, code: str, subtotal: float, shipping_fee: float, user_id: int
+        self,
+        code: str,
+        subtotal: float,
+        shipping_fee: float,
+        user_id: int,
+        for_update: bool = False,
     ) -> CouponApplication:
         """Validate + tính giảm cho một mã. CHẠY TRONG transaction của caller (đọc repo).
+
+        for_update=True: khóa dòng coupon (dùng khi thực sự tạo đơn) để tăng used_count an
+        toàn dưới truy cập đồng thời; preview để mặc định False (chỉ đọc, không khóa).
 
         Lỗi: E10400 không tồn tại, E10402 không hợp lệ (vô hiệu), E10401 hết hạn,
         E10404 chưa đạt đơn tối thiểu, E10405 hết lượt, E10406 user đã dùng.
         """
-        coupon = await self._repo.find_by_code(code)
+        coupon = await self._repo.find_by_code(code, for_update=for_update)
         if not coupon:
             raise AppException("E10400")
 
@@ -170,7 +183,7 @@ class CouponService:
         if not (start <= now <= end):
             raise AppException("E10401")
 
-        if subtotal < float(coupon.min_order_amount or 0):
+        if money(subtotal) < money(coupon.min_order_amount):
             raise AppException("E10404")
 
         if coupon.usage_limit is not None and coupon.used_count >= coupon.usage_limit:
@@ -190,6 +203,17 @@ class CouponService:
         """Tăng used_count cho coupon. CHẠY TRONG transaction của caller (sau khi tạo đơn)."""
         coupon.used_count = (coupon.used_count or 0) + 1
         await self._repo.save(coupon)
+
+    async def decrement_usage(self, coupon: Coupon) -> None:
+        """Giảm used_count (không âm) - dùng khi hoàn kho đơn online quá hạn (nhả lại lượt dùng).
+        CHẠY TRONG transaction của caller."""
+        coupon.used_count = max((coupon.used_count or 0) - 1, 0)
+        await self._repo.save(coupon)
+
+    async def get_coupon_for_update(self, coupon_id: int) -> Coupon | None:
+        """Lấy coupon kèm khóa dòng để tăng used_count. CHẠY TRONG transaction của caller
+        (dùng khi xác nhận thanh toán online - trừ kho + tăng lượt dùng cùng một transaction)."""
+        return await self._repo.find_for_update(coupon_id)
 
     @staticmethod
     def _as_aware(dt: datetime) -> datetime:

@@ -1,6 +1,7 @@
 from sqlalchemy import select
 
 from app.entity.review import Review
+from app.pagination import paginate
 from xime.starters.sqlalchemy import CrudRepository
 
 
@@ -24,7 +25,7 @@ class ReviewRepository(CrudRepository[Review]):
     ) -> list[Review]:
         # Approved reviews of a product, newest first, paginated (public listing)
         # Đánh giá đã duyệt của sản phẩm, mới nhất trước, có phân trang (công khai)
-        offset = (page - 1) * limit
+        offset, limit = paginate(page, limit)
         result = await self.session.execute(
             select(Review)
             .where(Review.product_id == product_id)

@@ -73,7 +73,7 @@ class CartController:
         user = require_login()
         item = await self._svc.get_cart_item_by_id(id)
         if not item:
-            raise AppException("E10601")
+            raise AppException("E10300")  # Không tìm thấy giỏ hàng (404)
         # Chủ sở hữu hoặc người có quyền view_carts mới được xem
         # Owner or holder of view_carts may view
         await self._authz.require_owner_or_permission(user, "view_carts", item, target_id=id)
@@ -81,8 +81,10 @@ class CartController:
 
     @post("", status_code=201)
     async def create(self, body: CartCreateRequest) -> dict:
+        # Self-service: thêm vào GIỎ CỦA CHÍNH MÌNH chỉ cần đăng nhập (giống wishlist/order/review).
+        # create_cart_item gắn theo user.id nên không cần quyền admin "create_cart".
+        # Self-service: adding to one's OWN cart needs only login; the item is scoped to user.id.
         user = require_login()
-        await self._authz.require(user, "create_cart")
         data = body.model_dump(by_alias=False)
         item = await self._svc.create_cart_item(user.id, data)
         result = await self._item_to_dict(item)

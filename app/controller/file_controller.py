@@ -126,7 +126,17 @@ class FileController:
 
     @put("/{id}")
     async def update(self, id: int, body: FileUpdateRequest) -> FileResponse:
-        require_login()
+        # Owner of the uploaded file, or an admin holding delete_file, may edit its metadata
+        # (fix IDOR: previously any logged-in user could edit/reassign any file by id)
+        # Chủ file đã upload, hoặc admin có quyền delete_file, mới được sửa metadata
+        # (vá IDOR: trước đây user đăng nhập bất kỳ sửa/gán lại file bất kỳ theo id)
+        user = require_login()
+        db_file = await self._svc.get_file_by_id(id)
+        if not db_file:
+            raise AppException("E10200")
+        await self._authz.require_owner_or_permission(
+            user, "delete_file", db_file, target_id=id
+        )
         data = body.model_dump(exclude_unset=True, by_alias=True)
         db_file = await self._svc.update_info_file(id, data)
         return FileResponse.model_validate(db_file)

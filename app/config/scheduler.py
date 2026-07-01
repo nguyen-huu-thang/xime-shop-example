@@ -20,6 +20,7 @@ from xime.starters.scheduler import (
 )
 
 from app.job.cooccurrence_rebuild_job import CooccurrenceRebuildJob
+from app.job.expire_orders_job import ExpireOrdersJob
 
 # Không chạy scheduler khi test: AsyncScheduler khởi động trong mỗi TestApplication và không được
 # tắt sạch giữa các test (event loop đóng), gây nhiễu chéo. Prod (python -m app.main) không nạp
@@ -32,6 +33,9 @@ if "pytest" not in sys.modules:
                 # 03:00 hằng ngày - giờ thấp điểm, dựng lại "mua cùng" từ order_details
                 # Daily at 03:00 (off-peak) - rebuild co-occurrence from order_details
                 CronJob(job_class=CooccurrenceRebuildJob, cron="0 3 * * *"),
+                # Mỗi 10 phút - hủy đơn online quá hạn thanh toán + hoàn kho (giữ chỗ hết hạn)
+                # Every 10 minutes - cancel overdue online orders + restore reserved stock
+                CronJob(job_class=ExpireOrdersJob, cron="*/10 * * * *"),
             ],
             timezone="Asia/Ho_Chi_Minh",
         )

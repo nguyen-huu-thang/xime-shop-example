@@ -30,6 +30,18 @@ nên **chưa rò rỉ dữ liệu thật**, nhưng để hở sẽ lộ ngay khi
   `not is_approved` thì yêu cầu chủ sở hữu hoặc quyền `view_reviews` (khách ẩn danh -> 401). Review
   đã duyệt vẫn xem công khai. Sửa luôn error code khi không thấy: `E10200` -> `E10600`.
 
+### 3. `file_controller.py` - PUT /{id} thiếu owner/quyền (đã vá 2026-07-01)
+
+Phát hiện khi rà mở rộng toàn bộ controller (2026-07-01). `PUT /api/files/{id}` (sửa metadata file)
+trước chỉ có `require_login()` -> bất kỳ user đăng nhập sửa/gán lại **file bất kỳ theo id** (đổi
+`description/sort`, bật/tắt `isActive` để ẩn ảnh sản phẩm, gán lại `productId`/`reviewId`). IDOR +
+thiếu phân quyền (upload gắn theo `user.id`, delete cần `delete_file`, riêng update để hở).
+
+Đã vá: controller lấy file qua `get_file_by_id` rồi
+`require_owner_or_permission(user, "delete_file", db_file, target_id=id)` - chủ file (theo
+`file.user_id`) hoặc admin có `delete_file` mới sửa được. Không thêm quyền mới vào seed (dùng lại
+`delete_file`). Test: `test/test_security.py::test_file_update_requires_owner_or_permission`.
+
 ## Quyết định: KHÔNG đổi (có chủ đích)
 
 - **`file_download_controller.py` (`GET /media/{key}`) giữ CÔNG KHAI.** Đây là ảnh sản phẩm cho

@@ -22,10 +22,16 @@ from app.exception.app_exception import AppException
 from app.security.current_user import require_login
 from app.service.auth_token_service import AuthTokenService
 from app.service.email_service import EmailService
+from app.service.rate_limiter_service import RateLimiterService
 from app.service.refresh_token_service import RefreshTokenService
 from app.service.user_service import UserService
 
 logger = logging.getLogger(__name__)
+
+# Chống spam email: tối đa 3 yêu cầu gửi (quên MK / OTP) mỗi mục tiêu trong 15 phút.
+# Anti-spam: max 3 send requests (forgot-password / OTP) per target per 15 minutes.
+_SEND_MAX = 3
+_SEND_WINDOW = 15 * 60
 
 
 class AuthAccountController:
@@ -38,11 +44,13 @@ class AuthAccountController:
         user_service: UserService,
         email_service: EmailService,
         refresh_token_service: RefreshTokenService,
+        rate_limiter_service: RateLimiterService,
     ) -> None:
         self._tokens = auth_token_service
         self._user_svc = user_service
         self._email = email_service
         self._refresh_svc = refresh_token_service
+        self._rate = rate_limiter_service
 
     # ── Xác minh email ──────────────────────────────────────────────────────────
 
@@ -69,6 +77,11 @@ class AuthAccountController:
     @post("/forgot-password", status_code=200)
     async def forgot_password(self, body: ForgotPasswordRequest) -> MessageResponse:
         # Công khai. Luôn trả 200 dù email không tồn tại (tránh dò tài khoản).
+        # Rate limit theo email để chống spam gửi mail đặt lại mật khẩu.
+        # Rate limit by email to prevent reset-email spamming.
+        await self._rate.guard(
+            f"rl:forgot:{body.email.strip().lower()}", _SEND_MAX, _SEND_WINDOW
+        )
         user = await self._user_svc.get_user_by_email(body.email)
         if user is not None:
             token = await self._tokens.create_reset_password(user.id)
@@ -96,6 +109,9 @@ class AuthAccountController:
     async def request_otp(self) -> MessageResponse:
         # Cần đăng nhập: gửi OTP tới email của user (gửi đồng bộ).
         user = require_login()
+        # Rate limit theo user để chống spam gửi OTP.
+        # Rate limit by user to prevent OTP send spamming.
+        await self._rate.guard(f"rl:otp:{user.id}", _SEND_MAX, _SEND_WINDOW)
         code = await self._tokens.create_otp(user.id)
         try:
             await self._email.send_otp(user.email, code)

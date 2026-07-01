@@ -101,6 +101,15 @@ class CartService:
             db_cart = await self._repo.find(cart_id)
             if not db_cart:
                 raise AppException("E10300")  # Cart item not found
+            # Reject quantities beyond available stock (create/increment already check;
+            # update must too, otherwise the cart can hold more than in stock).
+            # Chặn số lượng vượt tồn kho (nhánh tạo/tăng đã kiểm tra; cập nhật cũng phải
+            # kiểm tra, nếu không giỏ có thể chứa nhiều hơn tồn kho).
+            option = await self._option_repo.find(db_cart.product_option_id)
+            if not option:
+                raise AppException("E10204")  # Product option not found
+            if option.stock < quantity:
+                raise AppException("E10201")  # Product out of stock
             db_cart.quantity = quantity
             return await self._repo.save(db_cart)
 

@@ -27,3 +27,13 @@ class RefreshTokenRepository(CrudRepository[RefreshToken]):
         )
         await self.session.flush()
         return result.rowcount
+
+    async def delete_by_user_id_except(self, user_id: int, keep_jti: str | None) -> int:
+        # Thu hồi refresh token của mọi phiên khác, GIỮ phiên hiện tại (keep_jti).
+        # Revoke all other sessions' refresh tokens, keeping the current one (keep_jti).
+        stmt = delete(RefreshToken).where(RefreshToken.user_id == user_id)
+        if keep_jti is not None:
+            stmt = stmt.where(RefreshToken.id != keep_jti)
+        result = await self.session.execute(stmt)
+        await self.session.flush()
+        return result.rowcount

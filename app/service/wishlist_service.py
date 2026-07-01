@@ -53,15 +53,20 @@ class WishlistService:
             items = await self._repo.find_by_user_id(user_id)
         result: list[dict] = []
         for item in items:
-            product = await self._product_svc.get_product_by_id(item.product_id)
-            if product:
-                result.append(
-                    {
-                        "wishlistId": item.id,
-                        "productId": product.id,
-                        "name": product.name,
-                    }
-                )
+            # get_product_by_id RAISE E10200 khi sản phẩm thiếu/đã xóa mềm -> bỏ qua dòng đó,
+            # không để cả wishlist vỡ vì một sản phẩm không còn (vd bị soft-delete).
+            # Skip lines whose product is missing/soft-deleted instead of failing the whole list.
+            try:
+                product = await self._product_svc.get_product_by_id(item.product_id)
+            except AppException:
+                continue
+            result.append(
+                {
+                    "wishlistId": item.id,
+                    "productId": product.id,
+                    "name": product.name,
+                }
+            )
         return result
 
     async def create_wishlist_item(self, data: dict, user_id: int) -> Wishlist:

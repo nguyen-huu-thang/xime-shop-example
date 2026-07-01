@@ -59,6 +59,16 @@ class _OptVal:
         self.attribute_value_id = attribute_value_id
 
 
+class _File:
+    def __init__(self, id, target_id, file_path, sort=1):
+        self.id = id
+        self.target_id = target_id
+        self.file_path = file_path
+        self.sort = sort
+        self.is_active = True
+        self.list_table_id = "products"
+
+
 # ─── Fake sub-service: trả dữ liệu đã chuẩn bị + đếm số lần gọi ──────────────
 
 class _FakeAttrSvc:
@@ -101,6 +111,19 @@ class _FakeOptValSvc:
         return [ov for ov in self._rows if ov.option_id in option_ids]
 
 
+class _FakeFileRepo:
+    def __init__(self, rows):
+        self._rows = rows
+        self.calls = 0
+
+    async def find_active_by_targets(self, table_name, target_ids):
+        self.calls += 1
+        rows = [f for f in self._rows if f.target_id in target_ids]
+        # Mô phỏng ORDER BY target_id, sort, id của query thật.
+        rows.sort(key=lambda f: (f.target_id, f.sort, f.id))
+        return rows
+
+
 def _make_service():
     """Dựng ProductService chỉ với 4 sub-service fake; phần còn lại None (không dùng trong _to_dtos).
 
@@ -131,7 +154,13 @@ def _make_service():
         _OptVal(4, 1001, 102),  # opt1001 -> Red
         # opt2000 (P2) không có value -> là option mặc định
     ]
-    svc = ProductService(None, None, None, None,
+    # P1 có 2 ảnh (sort 2 và 1) -> ảnh đại diện là sort nhỏ nhất; P2/P3 không ảnh.
+    files = [
+        _File(900, 1, "ab/cd/img-late.webp", sort=2),
+        _File(901, 1, "ab/cd/img-main.webp", sort=1),
+    ]
+    # transaction, cache, product_repo, category_repo = None; file_repo + 4 sub-service là fake.
+    svc = ProductService(None, None, None, None, _FakeFileRepo(files),
                          _FakeAttrSvc(attrs), _FakeValSvc(vals),
                          _FakeOptSvc(opts), _FakeOptValSvc(optvals))
     return svc
@@ -148,6 +177,7 @@ async def test_to_dtos_batch_calls_each_query_once():
     assert svc._attr_val_svc.calls == 1
     assert svc._option_svc.calls == 1
     assert svc._option_val_svc.calls == 1
+    assert svc._file_repo.calls == 1  # ảnh cũng batch 1 query
     assert len(dtos) == 3
 
 
@@ -164,18 +194,22 @@ async def test_to_dtos_values_correct_all_branches():
     assert p1["stock"] == 8
     assert p1["attribute"] == {"Size": ["40", "41"], "Color": ["Red"]}
     assert p1["categoryId"] == 5
+    # Ảnh đại diện = file sort nhỏ nhất; P2/P3 không ảnh -> None
+    assert p1["imageUrl"] == "ab/cd/img-main.webp"
 
     # P2: đúng 1 option -> lấy thẳng; không attribute
     p2 = by_id[2]
     assert p2["price"] == 50
     assert p2["stock"] == 9
     assert p2["attribute"] == {}
+    assert p2["imageUrl"] is None
 
     # P3: không option -> giá None, tồn 0
     p3 = by_id[3]
     assert p3["price"] is None
     assert p3["stock"] == 0
     assert p3["attribute"] == {}
+    assert p3["imageUrl"] is None
 
 
 @pytest.mark.asyncio

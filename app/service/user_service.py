@@ -14,6 +14,13 @@ from app.repository.user_repository import UserRepository
 
 _crypt = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
+# Hash bcrypt của một chuỗi cố định (không phải mật khẩu thật). Khi username KHÔNG tồn tại, ta
+# vẫn verify với hash này để thời gian phản hồi giống hệt trường hợp sai mật khẩu -> không lộ
+# username có tồn tại hay không qua đo thời gian (chống user enumeration + timing attack).
+# Precomputed dummy bcrypt hash: verified against when the username is unknown so timing matches
+# the wrong-password path (defeats user enumeration + timing attacks).
+_DUMMY_HASH = _crypt.hash("timing-equalizer-not-a-real-password")
+
 
 class UserService:
     def __init__(
@@ -35,14 +42,20 @@ class UserService:
             return await self._user_repo.all_active_ids()
 
     async def verify_user_password(self, username: str, password: str) -> User:
-        """Return active user if credentials are valid.
-        Trả về user đang hoạt động nếu thông tin đăng nhập hợp lệ.
-        Raises E1004 nếu không tìm thấy, E1005 nếu sai mật khẩu.
+        """Return user if credentials are valid.
+        Trả về user nếu thông tin đăng nhập hợp lệ.
+
+        Trả CÙNG một lỗi E1005 cho cả "không tồn tại username" lẫn "sai mật khẩu", và luôn chạy
+        một phép bcrypt (thật hoặc giả) để thời gian phản hồi đồng nhất -> không lộ tài khoản
+        nào tồn tại (chống user enumeration + timing attack).
         """
         async with self._transaction():
             user = await self._user_repo.find_by_username(username)
         if not user:
-            raise AppException("E1004")
+            # Chạy bcrypt giả cho khớp thời gian rồi báo lỗi chung (không phân biệt với sai MK).
+            # Run a dummy bcrypt to match timing, then raise the generic error.
+            _crypt.verify(password, _DUMMY_HASH)
+            raise AppException("E1005")
         if not _crypt.verify(password, user.password):
             raise AppException("E1005")
         return user

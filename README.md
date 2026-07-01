@@ -1,137 +1,203 @@
-# Shop Backend (Python/Xime)
+# Shop Backend (Python / Xime)
 
-Bản migrate **Shop Backend** từ PHP/Symfony sang Python, dùng framework **[Xime](https://github.com/nguyen-huu-thang/xime-framework)** với kiến trúc đa lớp.
+> Backend thương mại điện tử (bán hàng) xây dựng bằng **Python** trên framework
+> **[Xime](https://github.com/nguyen-huu-thang/xime-framework)**, theo **kiến trúc đa lớp (layered)**.
+> Đây là bản migrate 1-1 từ một backend gốc viết bằng **PHP/Symfony**.
 
-> **Mục đích chính của dự án này là kiểm thử framework Xime trong thực tế** - xác minh các tính năng
-> DI, routing, transaction, security, SQLAlchemy starter hoạt động đúng trên một ứng dụng backend
-> thật quy mô vừa. Dự án đồng thời là **tài liệu tham khảo** (reference implementation) cho bất kỳ
-> ai muốn học cách xây dựng ứng dụng Python với Xime theo kiến trúc đa lớp.
+Dự án này có hai mục đích:
 
-## Dự án gốc (PHP/Symfony)
+1. **Kiểm thử Xime framework trong thực tế** - xác minh DI, routing, transaction, security, SQLAlchemy
+   starter hoạt động đúng trên một backend thật quy mô vừa.
+2. **Bản tham khảo (reference implementation)** cho ai muốn xây dựng ứng dụng Python với Xime theo
+   kiến trúc đa lớp (KHÔNG dùng Hexagonal/Clean như Xime khuyến nghị mặc định).
 
-Toàn bộ nghiệp vụ được sao chép 1-1 từ dự án backend gốc viết bằng **PHP/Symfony**:
+```text
+Trình duyệt / Frontend Next.js
+        │  HTTP (JSON), JWT
+        ▼
+   Shop Backend (FastAPI qua Xime WebAdapter)
+   controller → service → repository → entity
+        │
+        ▼
+   PostgreSQL  +  Local Disk (ảnh, file)
+```
 
-➡️ **[github.com/nguyen-huu-thang/shop-backend](https://github.com/nguyen-huu-thang/shop-backend)**
+---
 
-Dự án Python này giữ nguyên kiến trúc đa lớp và logic nghiệp vụ của bản gốc, chỉ thay đổi
-ngôn ngữ và framework. Bảng đối chiếu công nghệ giữa hai bản:
+## Hệ sinh thái dự án
+
+| Thành phần | Repo |
+|---|---|
+| **Backend (repo này)** | [nguyen-huu-thang/xime-shop-example](https://github.com/nguyen-huu-thang/xime-shop-example) |
+| **Frontend (Next.js)** | [nguyen-huu-thang/shop-frontend-v2](https://github.com/nguyen-huu-thang/shop-frontend-v2) |
+| Bản gốc PHP/Symfony | [nguyen-huu-thang/shop-backend](https://github.com/nguyen-huu-thang/shop-backend) |
+| XIME Framework | [nguyen-huu-thang/xime-framework](https://github.com/nguyen-huu-thang/xime-framework) |
+
+> **Frontend** dùng Next.js + React, gọi thẳng các API của backend này. Mô hình giao tiếp, danh sách
+> endpoint và cách tích hợp xem ở repo frontend bên trên và tại [`docs/api.md`](docs/api.md).
+
+---
+
+## Tính năng
+
+- **Xác thực JWT** - access token trả body (client lưu RAM), refresh token đặt trong **httpOnly cookie**
+  path-scoped `/api/refresh-token`, có xoay token (rotation).
+- **Catalog** - danh mục dạng cây, sản phẩm + biến thể (thuộc tính / option / SKU), ảnh sản phẩm
+  (trả kèm `imageUrl`, stream qua `/media/{key}` hỗ trợ HTTP Range), tìm kiếm.
+- **Giỏ hàng - Yêu thích - Đánh giá** - thao tác self-service theo người dùng đăng nhập.
+- **Thanh toán (checkout)** - sổ địa chỉ, mã giảm giá nâng cấp (theo %/số tiền, trần giảm, đơn tối
+  thiểu, phạm vi tiền hàng/phí ship, giới hạn lượt, mỗi người 1 lần), xem trước tổng tiền, tạo đơn
+  theo địa chỉ + coupon + phương thức (COD / online giả lập), cổng thanh toán mô phỏng.
+- **Thông báo in-app** - hộp thư theo người dùng, đếm chưa đọc, đánh dấu đã đọc, broadcast cho admin.
+- **Email** - email giao dịch (xác nhận đơn, thanh toán) + email bảo mật (xác minh email, quên/đặt
+  lại mật khẩu, OTP). Tự TẮT khi chưa cấu hình SMTP nên không chặn luồng chính.
+- **Gợi ý / cá nhân hóa (không AI)** - "đã xem gần đây", "thịnh hành", "gợi ý cho bạn", "hay mua
+  cùng"; dựa trên kho sự kiện có trọng số + affinity danh mục + co-occurrence đồng mua.
+- **Phân quyền RBAC + ACL** - deny-overrides, superadmin bypass, scope theo nhánh danh mục, kiểm tra
+  quyền sở hữu (chống IDOR); thao tác trên dữ liệu của chính mình chỉ cần đăng nhập.
+- **Dashboard** thống kê quản trị, **cache** catalog, tối ưu **N+1** cho sản phẩm/biến thể.
+
+Chi tiết từng mảng xem trong [Tài liệu](#tài-liệu).
+
+---
+
+## Công nghệ
+
+| Hạng mục | Lựa chọn |
+|---|---|
+| Ngôn ngữ | Python 3.12+ (phát triển trên 3.14) |
+| Framework | XIME (DI, routing, transaction, starters) trên nền FastAPI |
+| ORM | SQLAlchemy 2 (async) qua `xime.starters.sqlalchemy` |
+| CSDL | PostgreSQL |
+| Validation | Pydantic 2 |
+| Migration | Alembic |
+| Mật khẩu | passlib + bcrypt |
+| Email | aiosmtplib qua `xime.starters.mail` (tùy chọn) |
+
+Đối chiếu với bản gốc PHP:
 
 | Bản gốc (PHP) | Bản này (Python) |
 |---|---|
-| PHP 8.2+ / Symfony | Python 3.12+ / Xime framework |
-| Doctrine ORM | SQLAlchemy (async) qua `xime.starters.sqlalchemy` |
+| PHP 8.2+ / Symfony | Python 3.12+ / XIME |
+| Doctrine ORM | SQLAlchemy async |
 | Symfony Validator | Pydantic |
-| Symfony DI (autowire) | Xime DI (constructor injection, type-hint driven) |
+| Symfony DI (autowire) | XIME DI (constructor injection theo type hint) |
 | Lcobucci JWT | PyJWT qua `xime.starters.jwt` |
-| EventListener (kernel.request) | Web middleware của Xime |
-| nelmio_api_doc | OpenAPI/Swagger tích hợp sẵn FastAPI |
-| MySQL hoặc PostgreSQL | PostgreSQL |
+| EventListener (kernel.request) | Web middleware của XIME |
+| nelmio_api_doc | OpenAPI/Swagger sẵn trong FastAPI |
 
-> Cùng tác giả; bản PHP được phát triển trước, bản Python là phiên bản viết lại để kiểm thử Xime.
+---
 
-## Xime framework — những gì được kiểm chứng qua dự án này
+## Bắt đầu nhanh
 
-| Tính năng Xime | Được kiểm thử ở |
-|---|---|
-| Scan-based DI (không annotation) | Toàn bộ service, repository, controller |
-| Class-based controller + decorator route | `controller/` — 18 controller |
-| `from __future__ import annotations` bắt buộc trên Python 3.14 khi method tên trùng builtin | Tất cả controller có method `list` |
-| `TransactionManager` từ `xime.core.transaction.manager` | Mọi service có thao tác ghi |
-| `AsyncSessionFactory.current()` | `BaseRepository` |
-| `xime.starters.sqlalchemy` starter | `config/database.py` |
-| `xime.adapters.web.openapi.JwtBearer` | `config/web.py` |
-| `TestApplication` + lifespan context trong test | `test/test_integration_db.py` |
-| Security context (`identity`, `credentials`) | `security/current_user.py` |
-
-## Yêu cầu
+### Yêu cầu
 
 - Python 3.12+
 - PostgreSQL 14+
-- Framework Xime
+- XIME Framework (cài từ source - xem dưới)
 
-## Cài đặt
+### Cài đặt
 
 ```bash
-# 1. Cài Xime framework
-pip install xime
+# 1. Cài XIME framework (editable, từ source)
+pip install -e "<đường-dẫn>/xime framework"
 
-# 2. Cài dependencies dự án
+# 2. Cài phụ thuộc dự án
 pip install -e ".[dev]"
-
-# 3. Sao chép file môi trường
-cp .env.example .env
-# Chỉnh sửa .env với thông tin DB và JWT thực tế
 ```
 
-## Cấu hình
+### Cấu hình
 
-Tạo file `.env` dựa trên `.env.example`. Các biến bắt buộc:
+Cấu hình runtime nằm trong [`resources/application.yml`](resources/application.yml) (server, database,
+jwt, cookie, cors, storage, mail). **Không commit bí mật thật** - ghi đè cục bộ qua
+`resources/application-local.yml` (đã gitignore). Các khối quan trọng:
 
-| Biến | Mô tả |
-|---|---|
-| `DATABASE_URL` | PostgreSQL async URL (`postgresql+asyncpg://...`) |
-| `JWT_SECRET_KEY` | Chuỗi bí mật JWT (tối thiểu 32 ký tự) |
-| `UPLOAD_DIR` | Thư mục lưu file upload (mặc định: `public/data`) |
+```yaml
+database:
+  url: "postgresql+asyncpg://user:pass@localhost:5432/shop"
+jwt:
+  secret: "đổi-thành-chuỗi-ngẫu-nhiên-tối-thiểu-32-ký-tự"
+storage:
+  local:
+    root: "public/data"     # nơi lưu ảnh/file trên đĩa
+```
 
-## Khởi tạo cơ sở dữ liệu
+### Khởi tạo CSDL
 
 ```bash
-# Chạy migration (Alembic)
-alembic upgrade head
-
-# Seed dữ liệu khởi tạo (quyền + nhóm admin + tài khoản admin)
-python -m app.seed
+alembic upgrade head          # tạo bảng
+python -m app.seed            # quyền + nhóm admin + tài khoản admin (admin / Admin@123)
+python -m app.seed_catalog    # (tùy chọn) nạp dữ liệu catalog demo
 ```
 
-Tài khoản admin mặc định: `admin` / `Admin@123` — **đổi mật khẩu ngay sau khi seed**.
+> Đổi mật khẩu admin ngay sau khi seed.
 
-## Chạy ứng dụng
+### Chạy
 
 ```bash
 python app/main.py
 ```
 
-Server chạy tại `http://localhost:8088` (hoặc theo cấu hình Xime).
+- API: `http://localhost:8088`
+- Swagger UI: `http://localhost:8088/docs`
 
-Swagger UI: `http://localhost:8088/docs`
-
-## Chạy tests
+### Kiểm thử
 
 ```bash
-pytest test/
+pytest
 ```
 
-## Cấu trúc thư mục
+---
 
+## Kiến trúc (tóm tắt)
+
+Dự án theo **kiến trúc đa lớp**, phụ thuộc đi một chiều:
+
+```text
+controller → service → repository → entity
+            ↘ service (khác)
 ```
+
+```text
 app/
-├── config/          # DI, web adapter, database config
-├── controller/      # HTTP endpoints (class-based, Xime routing)
-├── service/         # Business logic
-├── repository/      # Data access (SQLAlchemy async)
-├── entity/          # SQLAlchemy models
-├── dto/             # Request/Response Pydantic models
-│   ├── request/
-│   └── response/
-├── exception/       # AppException, error codes, handler
-├── security/        # JWT middleware, current_user context
-└── seed.py          # Dữ liệu khởi tạo
+├── config/        # DI binding, web (CORS/middleware/exception), database, routing
+├── controller/    # HTTP endpoint (class-based, decorator route của XIME)
+├── service/       # Business logic, mở transaction, gọi repository / service khác
+├── repository/    # Truy vấn DB (SQLAlchemy async, CrudRepository)
+├── entity/        # SQLAlchemy model
+├── dto/           # request/ (Pydantic input) + response/ (output)
+├── exception/     # AppException + error code + handler
+├── security/      # JWT middleware, ngữ cảnh current_user
+├── cache/         # cache catalog + registry quyền
+├── seed.py        # seed quyền/nhóm/admin
+└── seed_catalog.py# seed dữ liệu catalog demo
 ```
 
-## Danh sách API chính
+XIME tự inject phụ thuộc theo **type hint** của constructor - không annotation, không wire thủ công.
+Transaction được mở **tường minh** ở tầng service. Chi tiết: [`docs/kien-truc.md`](docs/kien-truc.md).
 
-| Module | Prefix | Mô tả |
-|---|---|---|
-| Auth | `/api` | login, logout, refresh, change-password |
-| Phân quyền | `/api/group`, `/api/permission`, ... | Nhóm, quyền, phân quyền |
-| Catalog | `/api/categories`, `/api/products` | Danh mục, sản phẩm |
-| Mua hàng | `/api/cart`, `/api/orders`, `/api/coupons` | Giỏ hàng, đơn hàng |
-| Tương tác | `/api/reviews`, `/api/wishlist`, `/api/notifications` | Đánh giá, yêu thích |
-| File | `/api/files` | Upload/quản lý file (stream tải xuống qua `/media/{key}`, hỗ trợ HTTP Range) |
-| Tìm kiếm | `/api/search` | Tìm kiếm sản phẩm |
-| Dashboard | `/api/dashboard/stats` | Thống kê quản trị (doanh thu, đơn, bán chạy, tồn kho thấp) |
+---
 
-> **Xác thực (cập nhật):** `POST /api/login` trả `accessToken` trong body (client lưu RAM) và đặt
-> refresh token vào **httpOnly cookie** path-scoped `/api/refresh-token`. `POST /api/refresh-token`
-> đọc refresh từ cookie, cấp access mới và **xoay** refresh token (đặt lại cookie). JS không đọc được
-> refresh token; cookie không gửi kèm các API khác.
+## Tài liệu
+
+| Tài liệu | Nội dung |
+|---|---|
+| [Tổng quan](docs/tong-quan.md) | Backend làm gì, ranh giới, vị trí trong hệ sinh thái |
+| [Kiến trúc](docs/kien-truc.md) | Kiến trúc đa lớp, XIME DI, transaction, cây thư mục |
+| [Mô hình dữ liệu](docs/mo-hinh-du-lieu.md) | Các bảng chính + quan hệ (user, product, variant, order...) |
+| [Phân quyền](docs/phan-quyen.md) | RBAC + ACL, deny-overrides, scope danh mục, ownership |
+| [API](docs/api.md) | Bản đồ REST endpoint theo nhóm + quy ước request/response |
+| [Tính năng](docs/tinh-nang.md) | Checkout/thanh toán, thông báo, email, gợi ý cá nhân hóa |
+| [Lỗi và mã lỗi](docs/loi-va-ma-loi.md) | Định dạng lỗi `{errorKey, code, message}` |
+
+---
+
+## Trạng thái dự án
+
+Đã hoàn thiện migrate và bổ sung đầy đủ nghiệp vụ (catalog, mua hàng, thanh toán, thông báo, email,
+gợi ý, phân quyền nâng cấp). Toàn bộ kiểm thử tự động đang xanh. Đây là **bản tham khảo phục vụ học
+tập** cho XIME Framework.
+
+## Giấy phép
+
+MIT
