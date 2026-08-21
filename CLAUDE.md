@@ -104,6 +104,19 @@ controller/service/repository/entity, test pass. Các cải tiến đã làm sau
   `test/test_hardening.py`. Chi tiết:
   [`.claude/docs/ra-soat-backend-2026-07-01.md`](.claude/docs/ra-soat-backend-2026-07-01.md).
 
+- **Nâng theo Xime 0.8.0 (2026-08-21) - đã xong, 171 test pass:** framework nhảy 0.6.x lên 0.8
+  (alpha cuối) mà **không breaking nào chạm shop** (đo trước: 166 test pass, `xime check config`
+  và `check module-level` đều CLEAN). Đã làm: **JWT qua starter của framework** (`JwtTokenSigner`
+  /`JwtTokenVerifier`, token mang `kid`, `leeway`, danh sách trắng thuật toán, `require=exp` -
+  xoay khóa được mà không đăng xuất toàn bộ người dùng; `ShopJwtKeyProvider` giữ khóa cũ trong
+  cửa sổ xoay); **hãm nhịp chuyển sang Xime Store/LMDB** (`CounterStore.incr` nguyên tử, đếm
+  chung giữa tiến trình, kèm `StoreCleanupJob`); **upload thôi tin `Content-Type` của client**
+  (khôi phục hiệu lực bản vá F2 của 0.7.1); `main.py` theo khuôn 0.8 (`use()` + `add_config()` ở
+  mức module) để sẵn sàng `share_load()`; ghim `xime>=0.8,<0.9` trong pyproject; thêm khối
+  `logging`. Còn nợ có chủ đích (đổi khóa thật, Redis cho cache catalog, `RefData` cho cây
+  category, middleware JWT của framework). Chi tiết:
+  [`.claude/docs/nang-cap-xime-0.8.md`](.claude/docs/nang-cap-xime-0.8.md).
+
 
 ## framework issues
 

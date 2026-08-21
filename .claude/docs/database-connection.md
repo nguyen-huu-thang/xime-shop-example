@@ -46,9 +46,13 @@ sqlalchemy.url = postgresql+asyncpg://localhost/shop   # placeholder, env.py đ�
 
 ## Lưu ý bảo mật
 
-- ⚠️ Đây là **mật khẩu dev cục bộ** (`123456`). Khi deploy thật, **không** hardcode — đọc từ biến
-  môi trường (`DATABASE_URL` / `.env`), và `.env` **không** commit lên git.
-- Dự án mẫu `data` dùng `application-local.yml` (gitignored) để override thông tin nhạy cảm.
+- ⚠️ Đây là **mật khẩu dev cục bộ** (`123456`). Khi deploy thật thì không để chuỗi thật trong
+  file nằm trong git.
+- ⚠️ **Xime KHÔNG nội suy `${VAR}` và không override từng khóa bằng biến môi trường.** Env chỉ
+  chọn file profile (`XIME_ENV`/`APP_ENV` -> `application-{env}.yml`). Nên cách "đọc từ
+  `DATABASE_URL`/`.env`" không hoạt động ở đây; đường đúng là một file profile riêng.
+- `application-local.yml` (gitignored) là file profile của máy dev, và nó **chỉ được nạp khi
+  `XIME_ENV=local`**. Máy chủ thì ghi đè `application-production.yml` lúc deploy.
 
 ## Trạng thái
 

@@ -1,22 +1,61 @@
-# Shop Backend — Runtime Configuration
+# Shop Backend - Runtime Configuration
 # Operator-configurable. KHÔNG commit thông tin nhạy cảm thật.
-# Override cục bộ qua application-local.yml (đã gitignore).
+#
+# ⚠ ĐO ĐƯỢC 2026-08-21: framework CHỈ nạp `application.yml` + `application-{env}.yml`, với env
+# lấy từ biến môi trường XIME_ENV/APP_ENV. Nghĩa là:
+#   - `application-local.yml` chỉ có tác dụng khi chạy với XIME_ENV=local. Không đặt biến đó
+#     thì file nằm im trên đĩa và KHÔNG khối nào của nó được đọc - không một dòng cảnh báo.
+#   - `application-secret.yml` KHÔNG BAO GIỜ được nạp (không có profile nào tên "secret").
+# Máy dev:  đặt secret vào application-local.yml VÀ chạy `XIME_ENV=local python -m app.main`.
+# Máy chủ:  ghi đè application-production.yml bằng bản có secret thật lúc deploy (mount/copy,
+#           không commit) và chạy với XIME_ENV=production.
+# Only application.yml and application-{XIME_ENV}.yml are ever loaded.
+
+# Logging gốc, áp lúc bootstrap. Không khai khối này thì root logger nằm ở WARNING và KHÔNG
+# có handler nào, nên mọi dòng INFO bị nuốt - một app khỏe trông y hệt một app treo. Từ Xime 0.8
+# mỗi adapter ghi một dòng INFO lúc bind xong, kèm CHẾ ĐỘ BẢO MẬT ngay trong dòng đó
+# (vd "web default: process main serving on 0.0.0.0:8088 (HTTP)"), nên tắt INFO là tự bịt mắt
+# trước đúng thứ cần đọc lúc khởi động.
+# Root logging applied at bootstrap; without it every INFO line is swallowed.
+logging:
+  enabled: true
+  level: "INFO"
 
 server:
   host: "0.0.0.0"
   port: 8088
 
-# Database — bổ sung sử dụng ở Phase 1 (starter SQLAlchemy).
+# Database - bổ sung sử dụng ở Phase 1 (starter SQLAlchemy).
 database:
   url: "postgresql+asyncpg://thang:123456@localhost:5432/shop"
   pool_size: 10
   max_overflow: 20
   echo: false
 
-# JWT — cấu hình xác thực token (Phase 3).
-# QUAN TRỌNG: thay jwt.secret bằng chuỗi ngẫu nhiên an toàn trước khi deploy.
+# JWT - cấu hình xác thực token (Phase 3).
+# QUAN TRỌNG: thay jwt.secret bằng chuỗi ngẫu nhiên an toàn trước khi deploy, và ĐỪNG commit
+# chuỗi thật - xem cách đặt secret ở đầu file (nó phụ thuộc XIME_ENV, không tự động).
 jwt:
   secret: "dev-secret-CHANGE-IN-PRODUCTION-use-32chars-minimum"
+  # kid của khóa ĐANG ký. Mọi token phát ra mang header `kid` bằng giá trị này, nhờ đó bên
+  # verify định tuyến được token tới đúng khóa - điều kiện để XOAY khóa mà không đăng xuất
+  # toàn bộ người dùng. Đổi khóa thì đổi luôn key_id (k1 -> k2), đừng giữ nguyên tên.
+  key_id: "k1"
+  algorithm: "HS256"    # cũng là DANH SÁCH TRẮNG lúc verify: khóa khai thuật toán khác bị từ chối
+  leeway: 30            # giây dung sai đồng hồ cho exp/nbf/iat (chống 401 chập chờn khi lệch giờ)
+  # Quy trình xoay khóa (không cắt dịch vụ):
+  #   1. Sinh secret mới. Chuyển secret+key_id hiện tại xuống previous_keys.
+  #   2. Đặt secret/key_id mới ở trên, deploy. Token cũ vẫn verify được bằng khóa trong danh
+  #      sách dưới; token mới ký bằng khóa mới.
+  #   3. Sau khi qua refresh_ttl (60 ngày) thì xóa mục cũ khỏi previous_keys.
+  # Retired keys: verification only, kept during a rotation window.
+  previous_keys: []
+  #  - kid: "k0"
+  #    secret: "chuỗi-cũ"
+  # Token phát TRƯỚC khi bật kid không mang header `kid`. Để true cho tới khi mọi token cũ hết
+  # hạn (tối đa refresh_ttl kể từ lần deploy này), rồi đặt false để siết lại.
+  # Accept legacy tokens with no `kid` until they expire.
+  accept_unkeyed: true
   issuer: "https://scime.click"
   audience: "https://shop.scime.click"
   access_ttl: 3600      # access token: 1 giờ (giây)
@@ -42,7 +81,24 @@ cors:
   # Production (application-production.yml) đặt null để TẮT regex này.
   allow_origin_regex: '^http://(localhost|(\d{1,3}\.){3}\d{1,3})(:\d+)?$'
 
-# Storage — lưu file qua StorageService của framework (starter localfs).
+# Kho liên tiến trình (Xime Store trên LMDB) - giữ state KHÔNG có nguồn bền vững và được
+# phép mất: hiện là bộ đếm hãm nhịp (login sai, gửi email reset, xin OTP).
+# Câu tự kiểm trước khi đặt thêm gì vào đây: "máy khởi động lại, bảng này rỗng trơn - app còn
+# chạy đúng không?". Không thì thứ đó thuộc DATABASE, không thuộc kho này.
+# Phạm vi: MỘT máy. Nhiều máy cùng đếm chung thì tầng đó phải là Redis qua CacheService.
+#
+# path: framework cố ý KHÔNG có mặc định - nhiều service Xime chạy chung một máy, một mặc định
+# dùng chung sẽ âm thầm trộn bảng của chúng với nhau (hỏng IM LẶNG).
+#   - Dev Windows: thư mục thường trong repo (đã gitignore).
+#   - Prod Linux: /dev/shm/shop-store (thẳng trên RAM) - xem application-production.yml.
+# LƯU Ý Windows: LMDB cấp phát file THẬT ngay lúc mở, nên map_size là chi phí đĩa có thật.
+# Cross-process store for state with no durable source (rate-limit counters).
+lmdb:
+  path: "runtime/store"
+  # map_size: "64MB"     # cỡ khởi điểm của MỖI file, tự nới gấp đôi khi đầy (kèm WARNING)
+  # total_max: "1GB"     # trần cứng cho CẢ kho; vượt dung lượng trống -> CHẶN khởi động
+
+# Storage - lưu file qua StorageService của framework (starter localfs).
 # root: thư mục gốc chứa object trên đĩa. Giữ "public/data" để tương thích file cũ.
 # Đổi sang backend s3 (MinIO) bằng cách bind S3FileStorage trong config/dependency.py
 # và thêm khối storage.s3.* tương ứng.
@@ -55,8 +111,9 @@ storage:
 # - host/port/use_tls đã đặt sẵn cho Gmail (STARTTLS cổng 587). KHÔNG cần đổi nếu dùng Gmail.
 # - username/password để TRỐNG -> app TỰ TẮT gửi email (EmailService bỏ qua, chỉ log) nên
 #   không gọi mạng khi chạy test. Điền đủ username + password mới bật gửi thật.
-# - BẢO MẬT: KHÔNG commit app password thật. Nên điền vào resources/application-local.yml
-#   (đã gitignore) thay vì file này, hoặc mount lúc runtime (xem framework-issues/issue-004).
+# - BẢO MẬT: KHÔNG commit app password thật. Điền vào file profile theo cách ghi ở đầu file
+#   này (application-local.yml chỉ có tác dụng với XIME_ENV=local), hoặc mount lúc runtime
+#   (xem framework-issues/issue-004).
 mail:
   from: ""                       # vd: "Shop Demo <bạn@gmail.com>" - ĐIỀN VÀO
   smtp:

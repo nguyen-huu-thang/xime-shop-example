@@ -9,6 +9,7 @@ Regression cho các bản vá nghiêm trọng + trung bình (2026-07-01):
 
 Yêu cầu DB đã seed (giống test_checkout.py / test_security.py).
 """
+import asyncio
 import uuid
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
@@ -18,6 +19,7 @@ import pytest
 import app.config.web  # noqa: F401 - side effect: configure_controllers + openapi
 from app.config.dependency import dependency
 from app.service.order_service import OrderService
+from app.service.rate_limiter_service import RateLimiterService
 from httpx import ASGITransport, AsyncClient
 from xime.adapters.web import WebAdapter
 from xime.testing import TestApplication
@@ -287,6 +289,31 @@ async def test_forgot_password_rate_limited():
             assert r.status_code == 200, r.text
         r = await client.post("/api/forgot-password", json={"email": email})
         assert r.status_code == 429
+
+
+@pytest.mark.asyncio
+async def test_rate_limit_counter_is_atomic_under_concurrency():
+    """Bộ đếm hãm nhịp KHÔNG được mất lượt khi các lời gọi chạy song song.
+
+    ⚠ Đối chứng đã đo, và nó không đỏ với backend cũ trên máy này: bản cũ (CacheService.get rồi
+    set(n+1)) đi qua InMemoryCacheService thì KHÔNG đua, vì giữa hai bước không có await thật
+    nào để coroutine khác chen vào. Nó chỉ đua khi backend có I/O - và "đổi sang Redis khi
+    nhiều worker" đúng là điều comment của bản cũ khuyên. Đo bằng một cache mô phỏng round-trip
+    Redis: 20 lần hit song song chỉ đếm được 1.
+
+    Nên test này canh hành vi đúng của đường đang chạy (Store + incr nguyên tử), chứ không tự
+    nhận là đã tái hiện lỗi cũ trong môi trường test.
+    The counter must not lose increments under concurrency.
+    """
+    async with app_ctx() as (_client, test_app):
+        rate = test_app.get(RateLimiterService)
+        key = f"rl:test:atomic:{uuid.uuid4().hex}"
+        await rate.reset(key)
+
+        await asyncio.gather(*(rate.hit(key, 60) for _ in range(20)))
+
+        assert await rate._count(key) == 20
+        await rate.reset(key)
 
 
 # ── Đổi mật khẩu + đăng xuất các phiên khác (giữ phiên hiện tại) ───────────────

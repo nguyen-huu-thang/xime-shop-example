@@ -55,8 +55,10 @@ mail:
     timeout: 10
 ```
 
-> **Bảo mật:** KHÔNG commit app password thật. Nên điền vào `resources/application-local.yml`
-> (đã gitignore) thay vì `application.yml`, hoặc mount lúc runtime. Lấy App Password tại
+> **Bảo mật:** KHÔNG commit app password thật. Điền vào `resources/application-local.yml`
+> (đã gitignore) **và chạy với `XIME_ENV=local`** - framework chỉ nạp `application.yml` +
+> `application-{env}.yml`, nên không đặt biến đó thì file local nằm im, không một dòng cảnh báo
+> (đo 2026-08-21). Trên máy chủ thì mount đè `application-production.yml`. Lấy App Password tại
 > Google Account -> Security -> 2-Step Verification -> App passwords (cần bật 2FA).
 
 Khi `username` + `password` còn trống -> `EmailService.enabled = False` -> mọi email bị bỏ qua an toàn.
@@ -72,7 +74,7 @@ Khi `username` + `password` còn trống -> `EmailService.enabled = False` -> m�
 - Test: [`test_email.py`](../../test/test_email.py) (5 unit test BẬT/TẮT, không gọi mạng).
 
 ### Cách test thủ công (sau khi điền Gmail)
-1. Điền `mail.smtp.username/password` + `mail.from` (vào `application-local.yml`).
+1. Điền `mail.smtp.username/password` + `mail.from` (vào `application-local.yml`, chạy kèm `XIME_ENV=local`).
 2. `pip install xime[mail]` nếu chưa có `aiosmtplib` (môi trường hiện tại đã có 5.1.1).
 3. Đăng nhập admin, gọi `POST /api/email/test` với `{"to": "địa-chỉ-nhận@..."}` -> kiểm hộp thư.
 4. Hoặc đặt một đơn hàng -> nhận email xác nhận.

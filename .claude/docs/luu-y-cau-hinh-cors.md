@@ -40,7 +40,7 @@ configure_middleware(JwtMiddleware, ...)
 
 ### 2. Cookie refresh phải gửi được cross-site
 
-Sửa `resources/application.yml` (hoặc `application-local.yml`):
+Sửa `resources/application.yml` (hoặc `application-local.yml`, nhớ chạy kèm `XIME_ENV=local`):
 
 ```yaml
 cookie:

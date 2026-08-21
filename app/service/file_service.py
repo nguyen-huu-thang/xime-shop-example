@@ -122,13 +122,19 @@ class FileService:
 
         # Stream thẳng vào storage theo chunk (không nạp hết vào RAM), giới hạn dung lượng.
         # Stream straight into storage chunk by chunk with a size cap (never buffer in RAM).
+        #
+        # KHÔNG truyền content_type: Xime 0.7.1 (bản vá F2) cố ý suy content type từ TÊN FILE
+        # chứ không lấy header Content-Type của phần multipart, vì header đó do kẻ gọi điều
+        # khiển và backend S3 trả lại y nguyên lúc tải về - đó là đường biến một "avatar.png"
+        # khai text/html thành XSS lưu trữ. Trước đây chỗ này truyền lại đúng giá trị của
+        # client nên bản vá của framework không có tác dụng.
+        # Never forward the client's Content-Type: the framework derives it from the file name.
         try:
             file_size = await save_upload(
                 self._storage,
                 relative_path,
                 upload_file,
                 max_bytes=_MAX_UPLOAD_BYTES,
-                content_type=upload_file.content_type,
             )
         except PayloadTooLarge as exc:
             raise AppException("E5012") from exc  # vượt dung lượng cho phép (413)

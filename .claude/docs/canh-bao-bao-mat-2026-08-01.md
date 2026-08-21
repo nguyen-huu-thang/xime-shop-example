@@ -8,7 +8,10 @@
 >
 > File này chỉ trả lời một câu: **repo NÀY dính cái gì, ở dòng nào.**
 >
-> Trạng thái 2026-08-01: **CHƯA VÁ GÌ CẢ.** Cập nhật dòng này khi vá.
+> Trạng thái 2026-08-01: **CHƯA VÁ GÌ CẢ.**
+> Trạng thái **2026-08-21**: xem mục "Cập nhật 2026-08-21" ở cuối file. Tóm tắt: **A3 vẫn CHƯA
+> VÁ** (secret vẫn là chuỗi trong git), nhưng nay đã có **đường vá không cắt dịch vụ**; A6 đã
+> vá và mở rộng; A5, A4, A2 giữ nguyên.
 
 ## Repo này dính những gì
 
@@ -54,3 +57,27 @@
    `xime` cài **editable** và **không app nào có venv riêng**, nên một lần sửa
    framework là chạm cả 31 app ngay; và `xime.__version__` đang trả `0.6.3` trong
    khi code thật là `0.7.0`, nên **đừng dùng nó để xác nhận bản vá đã vào chưa**.
+
+
+---
+
+## Cập nhật 2026-08-21 (đợt nâng theo Xime 0.8)
+
+Chi tiết kỹ thuật: [`nang-cap-xime-0.8.md`](nang-cap-xime-0.8.md).
+
+| Mã | Trạng thái | Ghi chú |
+|---|---|---|
+| **A3** | 🟠 **CHƯA VÁ**, nhưng đã rẻ đi nhiều | Secret vẫn là chuỗi nằm trong git. Cái đã đổi là **khả năng vá**: token nay mang `kid`, và `jwt.previous_keys` cho phép giữ khóa cũ trong lúc chuyển - nên đổi khóa là **một lần deploy có gối đầu**, không còn là một lần đăng xuất toàn bộ người dùng. Muốn vô hiệu ngay token đang sống thì đổi `key_id` **và** đặt `accept_unkeyed: false`, không cần đợi hết 60 ngày |
+| **A6** | ✅ **ĐÃ VÁ, và rộng hơn báo cáo gốc** | Chú thích trỏ sang `application-secret.yml` đã bỏ. Đo thêm được: **`application-local.yml` cũng chỉ được nạp khi `XIME_ENV=local`** (`ld.load(None)` đọc ra `k1`, `ld.load("local")` mới đọc ra giá trị trong file local). Cả README, bốn tài liệu và ba dòng chú thích YAML của repo này đều đang dạy dùng file đó như một override mặc định - **đã sửa hết**, kèm cách đúng cho máy chủ (ghi đè `application-production.yml` lúc deploy) |
+| **A5** | 🟡 **CHƯA VÁ** (quyết định thiết kế đang treo) | `JwtMiddleware` vẫn fail-open: không có header `Authorization` thì đi tiếp ẩn danh, controller tự gọi `require_login()`. Đây là chủ đích (catalog công khai), nhưng "một route mới quên kiểm là một route công khai" vẫn đúng. Chuyển sang middleware của framework thì phải liệt kê `public_paths` **khớp chính xác từng đường dẫn** - cần một lượt rà riêng, xem mục 4 của tài liệu nâng cấp |
+| **A4** | 🟡 CHƯA VÁ | `/docs`, `/redoc`, `/openapi.json` vẫn công khai |
+| **A2** | 🟠 CHƯA VÁ (chỉ chạm dev) | `cors.allow_origin_regex` vẫn khớp mọi IPv4 công cộng ở `application.yml`; `application-production.yml` vẫn tắt nó bằng `null` |
+
+⚠ **Một dòng của báo cáo gốc nay đã lỗi thời:** *"`xime.__version__` đang trả `0.6.3` trong khi
+code thật là `0.7.0`"*. Framework hiện là **0.8.0** và `xime.__version__` trên máy này đọc ra
+đúng `0.8.0`. Cơ chế thì không đổi: giá trị đó đóng băng ở lần `pip install -e .` cuối, nên vẫn
+đừng dùng nó một mình để xác nhận một bản vá đã vào hay chưa.
+
+📌 Và một điểm của báo cáo gốc vẫn đúng nguyên: **nâng phiên bản `xime` không vá được gì trong
+bảng trên.** Đợt này nâng theo 0.8 chỉ làm cho A3 **vá được rẻ hơn**; bản thân việc vá vẫn là
+một quyết định vận hành chưa ai bấm nút.

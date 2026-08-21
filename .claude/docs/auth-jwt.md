@@ -55,16 +55,30 @@
 
 ## Thiết kế Python
 
-### Dùng `xime.starters.jwt`?
+### Dùng `xime.starters.jwt`? - ĐÃ CHỐT (2026-08-21): hướng B lai A
 
-Starter JWT của Xime tự động middleware. **Nhưng** logic ở đây đặc thù (kiểm tra blacklist trong DB,
-2 loại token liên kết qua `refresh_id`, set user vào context). Hai hướng:
+Starter JWT của Xime tự gắn middleware khi gọi `configure_jwt()`. Logic ở đây đặc thù (kiểm tra
+blacklist trong DB, 2 loại token liên kết qua `refresh_id`, nạp user vào context), nên:
 
-- **A. Tự viết middleware** trong `security/jwt_middleware.py` — sát PHP nhất, kiểm soát hoàn toàn.
-  Khuyến nghị nếu starter JWT không cho hook kiểm tra blacklist.
-- **B. Dùng starter JWT** cho phần verify chữ ký, tự thêm tầng kiểm tra blacklist + load user.
+- **Middleware vẫn tự viết** (`security/jwt_middleware.py`, pure-ASGI). **KHÔNG gọi
+  `configure_jwt()`** - gọi là gắn thêm middleware của framework, và `public_paths` của nó so
+  khớp **chính xác từng đường dẫn** chứ không theo tiền tố, trong khi shop có nhiều endpoint
+  công khai (catalog, `/media/{key}`).
+- **Lõi ký/verify dùng starter**: `JwtTokenSigner` / `JwtTokenVerifier` inject qua DI (bind
+  trong `config/dependency.py`), kèm `ShopJwtKeyProvider` implement Protocol `JwtKeyProvider`.
 
-→ **Quyết định ở Phase 1/Phase 3** sau khi đọc kỹ `xime.starters.jwt`. Mặc định nghiêng hướng A.
+Ba thứ lấy được so với gọi thẳng pyjwt:
+
+| | |
+|---|---|
+| **`kid` trong header token** | Xoay khóa được mà không đăng xuất toàn bộ người dùng: bên verify giữ nhiều khóa cùng lúc và chọn theo từng token |
+| **`leeway`** | Dung sai đồng hồ cho `exp`/`nbf`/`iat`. Thiếu nó thì hai máy lệch vài giây sinh 401 chập chờn - loại lỗi không tái hiện được trên máy dev |
+| **`algorithms` là danh sách trắng** | Áp TRƯỚC khi kiểm chữ ký; token không tự chọn được thuật toán yếu hơn |
+
+Quy trình xoay khóa và các khóa cấu hình mới: [`nang-cap-xime-0.8.md`](nang-cap-xime-0.8.md#21-jwt-ký-verify-đi-qua-starter-của-framework-và-token-có-kid).
+
+⚠ `validate_token` ép `require=["jti","exp","iss","aud"]`: PyJWT chỉ kiểm `exp` KHI claim tồn
+tại, nên token không mang `exp` sẽ không bao giờ hết hạn.
 
 ### `current_user()` — thay `$request->attributes->get('user')`
 
@@ -83,12 +97,22 @@ def current_user() -> User | None:
   dò thuật toán hash của PHP.
 - Chi tiết: [`quyet-dinh-thiet-ke.md`](quyet-dinh-thiet-ke.md#qđ-1-hash-mật-khẩu--dùng-bcrypt-mới-không-tương-thích-php).
 
-### Biến môi trường cần (resources/application.yml hoặc .env)
+### Cấu hình (resources/application.yml)
 
-```
-JWT_SECRET=...
-JWT_ISSUER=https://scime.click
-JWT_AUDIENCE=https://shop.scime.click
-JWT_ACCESS_TTL=...    # thời gian sống access token
-JWT_REFRESH_TTL=...   # thời gian sống refresh token
+⚠ Xime **không** nội suy `${VAR}` và **không** override từng khóa bằng biến môi trường: env chỉ
+chọn file profile (`XIME_ENV`/`APP_ENV` -> `application-{env}.yml`). Nên không có `JWT_SECRET`
+dạng biến môi trường - mọi thứ nằm trong YAML.
+
+```yaml
+jwt:
+  secret: "..."            # khóa ĐANG ký
+  key_id: "k1"             # trở thành header `kid` của token mới
+  algorithm: "HS256"       # cũng là danh sách trắng lúc verify
+  leeway: 30               # giây dung sai đồng hồ
+  previous_keys: []        # khóa cũ, CHỈ verify, dùng trong cửa sổ xoay khóa
+  accept_unkeyed: true     # chấp nhận token cũ chưa có `kid` tới khi chúng hết hạn
+  issuer: "https://scime.click"
+  audience: "https://shop.scime.click"
+  access_ttl: 3600
+  refresh_ttl: 5184000
 ```

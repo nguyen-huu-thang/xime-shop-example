@@ -59,7 +59,21 @@ shop/                              ← project root
 │   ├── security/                  ← Xác thực/phân quyền tầng hạ tầng — scanned
 │   │   ├── __init__.py
 │   │   ├── jwt_middleware.py      ← thay JwtAuthenticatorListener
+│   │   ├── jwt_key_provider.py    ← ShopJwtKeyProvider: khóa verify theo `kid` (xoay khóa)
+│   │   ├── cookies.py             ← đặt/xóa cookie refresh (httpOnly, path-scoped)
 │   │   └── current_user.py        ← lấy user hiện tại từ context
+│   │
+│   ├── store/                     ← Bảng của kho Xime Store (LMDB) - scanned
+│   │   ├── __init__.py
+│   │   └── rate_limit_store.py    ← CounterStore đếm hãm nhịp, dùng chung giữa tiến trình
+│   │
+│   ├── cache/                     ← Cache trong RAM tiến trình - scanned
+│   │   ├── in_memory_cache_service.py  ← impl CacheService (đổi sang Redis khi nhiều máy)
+│   │   └── category_tree_cache.py      ← cây category cho phân quyền theo nhánh
+│   │
+│   ├── job/                       ← Job định kỳ (Xime scheduler) - scanned
+│   │   ├── cooccurrence_rebuild_job.py
+│   │   └── expire_orders_job.py
 │   │
 │   ├── exception/                 ← EXCLUDED khỏi DI
 │   │   ├── __init__.py

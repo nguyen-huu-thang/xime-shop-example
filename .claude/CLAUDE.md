@@ -19,6 +19,7 @@ Xem mục "Trạng thái hiện tại" trong [`../CLAUDE.md`](../CLAUDE.md) đ�
 4. **Kế hoạch tổng thể** → [`docs/ke-hoach/README.md`](docs/ke-hoach/README.md)
 
 ### Đọc khi cần (tham chiếu)
+- ⚠ **Cảnh báo bảo mật (kiểm toán 2026-08-01, cập nhật 2026-08-21 - A3 CHƯA VÁ)** → [`docs/canh-bao-bao-mat-2026-08-01.md`](docs/canh-bao-bao-mat-2026-08-01.md)
 - **Quyết định thiết kế đã chốt** → [`docs/quyet-dinh-thiet-ke.md`](docs/quyet-dinh-thiet-ke.md)
 - **Kết nối cơ sở dữ liệu (URL, user, host)** → [`docs/database-connection.md`](docs/database-connection.md)
 - **Tổng quan & nguồn PHP** → [`docs/tong-quan-du-an.md`](docs/tong-quan-du-an.md)
@@ -35,6 +36,7 @@ Xem mục "Trạng thái hiện tại" trong [`../CLAUDE.md`](../CLAUDE.md) đ�
 - **Hệ thống Email (giao dịch + bảo mật OTP/reset/verify đã code)** → [`docs/thiet-ke-email.md`](docs/thiet-ke-email.md)
 - **Rà soát & vá phân quyền (search/review IDOR, 2026-06-30)** → [`docs/audit-phan-quyen-2026-06-30.md`](docs/audit-phan-quyen-2026-06-30.md)
 - **Chuẩn bị tài liệu công khai (gom việc đã làm + kế hoạch docs/)** → [`docs/chuan-bi-tai-lieu-cong-khai.md`](docs/chuan-bi-tai-lieu-cong-khai.md)
+- **Nâng cấp theo Xime 0.8 (JWT có kid + xoay khóa, hãm nhịp trên Store/LMDB, main.py khuôn mới)** → [`docs/nang-cap-xime-0.8.md`](docs/nang-cap-xime-0.8.md)
 - **Wiring web layer (configure_cors/middleware/exception, đã gỡ ShopWebAdapter)** → [`docs/go-web-adapter-dung-configure.md`](docs/go-web-adapter-dung-configure.md)
 - **Lưu ý cấu hình CORS + cookie cross-site** → [`docs/luu-y-cau-hinh-cors.md`](docs/luu-y-cau-hinh-cors.md)
 - **Repository pattern (SQLAlchemy)** → [`rules/repository-pattern.md`](rules/repository-pattern.md)

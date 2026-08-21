@@ -1,14 +1,22 @@
 [project]
 name = "shop-backend"
 version = "0.1.0"
-description = "Shop backend (PHP→Python migration) — bản tham chiếu/kiểm thử cho Xime framework"
+description = "Shop backend (PHP->Python migration) - bản tham chiếu/kiểm thử cho Xime framework"
 requires-python = ">=3.12"
 
-# Xime Framework được cài từ local path (editable):
+# Xime Framework: bản dev cài từ local path (editable) và VẪN thỏa ràng buộc dưới đây:
 #   pip install -e "D:\code\xime\xime framework"
 # Sau đó cài dependencies của dự án:
 #   pip install -e .
+#
+# Vì sao ghim dải bản: framework cài editable nên mọi thay đổi của nó rơi THẲNG vào app, mà
+# trước đây pyproject không khai xime nên không file nào nói app cần bản nào. 0.8 là bản alpha
+# CUỐI (0.9 sang beta, API coi như đã chốt), nên trần <0.9 là ranh giới có thật: qua 0.9 phải
+# đọc changelog rồi mới nới. Extras khai đúng thứ app dùng - thiếu một extra là lỗi lúc khởi
+# động kèm câu lệnh cần chạy, không phải lỗi ở request đầu tiên chạm tới nó.
+# Xime framework: the dev install is editable and still satisfies the pin below.
 dependencies = [
+    "xime[web,sqlalchemy,scheduler,mail,lmdb,jwt]>=0.8,<0.9",
     "sqlalchemy[asyncio]>=2.0",
     "asyncpg>=0.29",
     "alembic>=1.13",

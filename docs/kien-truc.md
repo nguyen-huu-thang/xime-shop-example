@@ -38,7 +38,7 @@ app/
 ├── seed.py         # seed quyền/nhóm/admin
 └── seed_catalog.py # seed dữ liệu catalog demo
 migrations/         # Alembic
-resources/          # application.yml (+ application-local.yml, application-production.yml)
+resources/          # application.yml (+ application-{env}.yml: local, production - chọn bằng XIME_ENV)
 test/               # pytest
 ```
 

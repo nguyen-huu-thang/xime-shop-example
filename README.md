@@ -110,8 +110,15 @@ pip install -e ".[dev]"
 ### Cấu hình
 
 Cấu hình runtime nằm trong [`resources/application.yml`](resources/application.yml) (server, database,
-jwt, cookie, cors, storage, mail). **Không commit bí mật thật** - ghi đè cục bộ qua
-`resources/application-local.yml` (đã gitignore). Các khối quan trọng:
+jwt, cookie, cors, storage, mail, logging, lmdb). **Không commit bí mật thật.**
+
+⚠ Framework chỉ nạp `application.yml` và `application-{env}.yml`, với `env` lấy từ biến môi
+trường `XIME_ENV`/`APP_ENV`. Nên `resources/application-local.yml` (đã gitignore) **chỉ có tác
+dụng khi chạy với `XIME_ENV=local`** - không đặt biến đó thì file nằm im và không dòng nào được
+đọc, cũng không có cảnh báo. Trên máy chủ: ghi đè `application-production.yml` bằng bản có
+secret thật lúc deploy rồi chạy với `XIME_ENV=production`.
+
+Các khối quan trọng:
 
 ```yaml
 database:

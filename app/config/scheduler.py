@@ -13,8 +13,10 @@ from __future__ import annotations
 
 import sys
 
+from xime.starters.lmdb import StoreCleanupJob
 from xime.starters.scheduler import (
     CronJob,
+    IntervalJob,
     SchedulerConfig,
     configure_scheduler,
 )
@@ -36,6 +38,13 @@ if "pytest" not in sys.modules:
                 # Mỗi 10 phút - hủy đơn online quá hạn thanh toán + hoàn kho (giữ chỗ hết hạn)
                 # Every 10 minutes - cancel overdue online orders + restore reserved stock
                 CronJob(job_class=ExpireOrdersJob, cron="*/10 * * * *"),
+                # Mỗi 10 phút - dọn bản ghi hết hạn trong kho Xime Store (LMDB).
+                # Không ảnh hưởng tính đúng đắn (bản ghi hết hạn đã vô hình với get()), chỉ thu
+                # hồi chỗ. Từ Xime 0.8 scheduler là adapter hạng đơn nhất nên nó chỉ chạy ở
+                # tiến trình primary - ghi LMDB là độc quyền theo file, N tiến trình cùng quét
+                # thì N-1 chỉ xếp hàng chờ khóa ghi.
+                # Every 10 minutes - reclaim space from expired store entries (primary only).
+                IntervalJob(job_class=StoreCleanupJob, minutes=10),
             ],
             timezone="Asia/Ho_Chi_Minh",
         )

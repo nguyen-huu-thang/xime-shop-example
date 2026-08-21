@@ -1,6 +1,18 @@
 """
 AuthenticationService - tạo/xác thực JWT, refresh, logout.
 Port từ AuthenticationService.php (HS256, claims: jti/uid/type/refreshId/reuseCount).
+
+Đổi 2026-08-21: ký/verify đi qua JwtTokenSigner / JwtTokenVerifier của Xime (starter jwt) thay
+vì gọi thẳng pyjwt. Ba thứ lấy được mà bản tự viết không có:
+
+- `kid` trong header token + nhiều khóa ứng viên lúc verify -> XOAY ĐƯỢC KHÓA mà không đăng
+  xuất toàn bộ người dùng (xem app/security/jwt_key_provider.py).
+- `leeway`: dung sai đồng hồ cho exp/nbf/iat. Thiếu nó thì hai máy lệch vài giây sinh 401 chập
+  chờn, và đó là loại lỗi không ai tái hiện được trên máy dev.
+- `algorithms` là DANH SÁCH TRẮNG áp trước khi kiểm chữ ký: khóa khai thuật toán ngoài danh
+  sách bị từ chối, token không tự chọn được thuật toán yếu hơn.
+
+Vẫn giữ pyjwt cho đúng MỘT việc: đọc header chưa verify để lấy `kid` (không cần khóa).
 """
 from __future__ import annotations
 
@@ -8,15 +20,22 @@ import secrets
 from datetime import UTC, datetime, timedelta
 
 import jwt as pyjwt
-from jwt import ExpiredSignatureError, PyJWTError
 
 from xime.core.config.runtime import RuntimeConfig
+from xime.core.exception.framework import AuthenticationException
+from xime.starters.jwt import JwtTokenSigner, JwtTokenVerifier
 
 from app.entity.user import User
 from app.exception.app_exception import AppException
+from app.security.jwt_key_provider import ShopJwtKeyProvider
 from app.service.blacklist_token_service import BlacklistTokenService
 from app.service.refresh_token_service import RefreshTokenService
 from app.service.user_service import UserService
+
+# Claim bắt buộc phải có mặt. `exp` nằm đây là cố ý: PyJWT chỉ kiểm exp KHI claim tồn tại, nên
+# token không mang exp sẽ không bao giờ hết hạn.
+# `exp` is only checked when present, so a token without it would never expire.
+_REQUIRED_CLAIMS = ["jti", "exp", "iss", "aud"]
 
 
 class AuthenticationService:
@@ -26,8 +45,16 @@ class AuthenticationService:
         refresh_token_service: RefreshTokenService,
         blacklist_token_service: BlacklistTokenService,
         user_service: UserService,
+        signer: JwtTokenSigner,
+        verifier: JwtTokenVerifier,
+        key_provider: ShopJwtKeyProvider,
     ) -> None:
-        self._secret: str = config.get("jwt.secret", "dev-secret-CHANGE-IN-PRODUCTION")
+        self._signer = signer
+        self._verifier = verifier
+        self._keys = key_provider
+        self._algorithms: list[str] = [self._keys.signing_key.algorithm]
+        # Dung sai đồng hồ (giây) cho exp/nbf/iat giữa máy ký và máy verify.
+        self._leeway: float = config.get("jwt.leeway", 30)
         self._issuer: str = config.get("jwt.issuer", "https://scime.click")
         self._audience: str = config.get("jwt.audience", "https://shop.scime.click")
         self._access_ttl: int = config.get("jwt.access_ttl", 3600)
@@ -76,7 +103,10 @@ class AuthenticationService:
         if token_type == "refresh":
             payload["reuseCount"] = reuse_count
 
-        token_str: str = pyjwt.encode(payload, self._secret, algorithm="HS256")
+        # Ký bằng khóa đang hoạt động; KeyContext.key_id trở thành header `kid`, nhờ đó bên
+        # verify định tuyến được token này tới đúng khóa khi khóa đã xoay.
+        # Sign with the active key; its key_id becomes the token's `kid` header.
+        token_str: str = self._signer.sign(payload, self._keys.signing_key)
 
         if token_type == "refresh":
             await self._refresh_svc.create_token(jti, expires_at, user.id)
@@ -90,19 +120,36 @@ class AuthenticationService:
         Xác thực chữ ký và claims của JWT. Không cần DB.
         """
         try:
-            claims: dict = pyjwt.decode(
-                token_str,
-                self._secret,
-                algorithms=["HS256"],
-                audience=self._audience,
-                issuer=self._issuer,
-                options={"require": ["jti", "exp", "iss", "aud"]},
-            )
-        except ExpiredSignatureError:
-            raise AppException("E1021")
-        except PyJWTError:
+            kid = pyjwt.get_unverified_header(token_str).get("kid")
+        except pyjwt.PyJWTError:
+            # Header hỏng -> token không phân tích nổi, khỏi bàn tới khóa nào.
             raise AppException("E1020")
-        return claims
+
+        candidates = self._keys.keys(kid)
+        if not candidates:
+            # Không biết kid này: khóa đã bị loại bỏ, hoặc token của hệ thống khác.
+            raise AppException("E1020")
+
+        expired = False
+        for key in candidates:
+            try:
+                return self._verifier.verify(
+                    token_str,
+                    key,
+                    audience=self._audience,
+                    issuer=self._issuer,
+                    algorithms=self._algorithms,
+                    leeway=self._leeway,
+                    require=_REQUIRED_CLAIMS,
+                )
+            except AuthenticationException as exc:
+                # Nhiều khóa ứng viên là chuyện bình thường trong cửa sổ xoay khóa: khóa sai
+                # thì thử khóa kế. Riêng "hết hạn" thì mọi khóa đều cho cùng kết cục, và nó
+                # phải giữ được mã lỗi riêng (E1021) để client biết đường gọi /refresh-token.
+                # A wrong key just means "try the next"; an expired token keeps its own code.
+                if "expired" in str(exc).lower():
+                    expired = True
+        raise AppException("E1021" if expired else "E1020")
 
     def extract_token_id(self, token_str: str) -> str | None:
         """Extract jti from token string. Returns None on any error.

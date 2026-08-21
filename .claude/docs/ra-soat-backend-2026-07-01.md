@@ -50,7 +50,13 @@ tạo/tăng đã kiểm tra từ trước).
 - `product_service.update_product`: danh mục không tồn tại `E10300` -> `E10202` (404).
 
 ### #6 (trung bình) Thiếu chống brute-force/spam -> rate limit qua CacheService
-Quyết định người dùng: **dùng CacheService**. `RateLimiterService` (đếm theo key + TTL,
+
+> ⚠ **Đã thay backend ngày 2026-08-21 (Xime 0.8):** bộ đếm chuyển từ `CacheService` sang
+> `RateLimitStore` (`CounterStore` trên LMDB) - dùng chung giữa các tiến trình của một máy và
+> `incr()` nguyên tử. Ngưỡng, khóa và mã lỗi bên dưới **giữ nguyên**. Lý do và phép đo:
+> [`nang-cap-xime-0.8.md`](nang-cap-xime-0.8.md#22-hãm-nhịp-chuyển-sang-xime-store-lmdb).
+
+Quyết định người dùng khi đó: **dùng CacheService**. `RateLimiterService` (đếm theo key + TTL,
 InMemoryCache đổi Redis được):
 - `/login`: tối đa 5 lần SAI/username/15 phút (đếm khi sai, reset khi đúng) -> 429 `E2003`.
 - `/forgot-password`: 3 lần/email/15 phút -> 429 `E1040`.
